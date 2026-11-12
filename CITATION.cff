@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use this software in your research or project, please cite it using the metadata from this file."
+title: "Lucifer Infiltrator X"
+abstract: "Precision-built Telegram automation, synchronisation, and media processing engine powered by Pyrofork, MongoDB Motor, and asynchronous multi-channel forwarding pipelines."
+type: software
+authors:
+  - name: "Lucifer Morningstar"
+    email: "ailuciferbaba@gmail.com"
+    website: "https://t.me/LuciferOpenSource"
+version: "2.4.0"
+date-released: "2026-10-11"
+license: "MIT"
+repository-code: "https://github.com/luciferopensource/Lucifer-Infiltrator-X-"
+url: "https://gitlab.com/luciferopensource/lucifer-infiltrator-x"
+keywords:
+  - telegram-bot
+  - pyrofork
+  - pyrogram
+  - automation
+  - media-processing
+  - stream-cleaner
+  - asynchronous
+  - mongodb

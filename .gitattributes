@@ -1,0 +1,50 @@
+# Git Attributes configuration for Lucifer Infiltrator X
+# Ensures consistent line endings, diff classification, and binary preservation
+
+# Global default: automatic text normalisation with LF line endings
+* text=auto eol=lf
+
+# Python source files with Python diff driver
+*.py text eol=lf diff=python
+
+# Shell scripts (strict LF for execution compatibility on Linux containers)
+*.sh text eol=lf
+Dockerfile text eol=lf
+
+# Markdown documentation with markdown diff driver
+*.md text eol=lf diff=markdown
+
+# Configuration and metadata files
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.ini text eol=lf
+*.txt text eol=lf
+*.cff text eol=lf
+
+# Repository governance files
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.editorconfig text eol=lf
+LICENSE text eol=lf
+
+# Binary media assets (prevent corruption from line-ending conversion)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.svg text eol=lf
+
+# Archives and compressed media
+*.zip binary
+*.tar.gz binary
+*.tgz binary
+*.7z binary
+*.rar binary
+
+# Telegram session databases (binary state files)
+*.session binary
+*.session-journal binary

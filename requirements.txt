@@ -1,0 +1,10 @@
+wheel
+setuptools
+pyrofork==2.3.45
+pyromod
+pyaes
+motor
+aiohttp
+psutil
+dnspython
+uvloop

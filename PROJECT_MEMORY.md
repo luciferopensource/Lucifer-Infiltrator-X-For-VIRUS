@@ -1,0 +1,194 @@
+# Project Memory — Restrict-main (restricted-media engine)
+
+**Project ID:** `restrict-main`
+**Directory:** `Restrict-main` — Git repository, branch `main`, HEAD `abba1d8` at last verification.
+**Last Verified:** 2026-11-06 (direct source inspection; nothing executed)
+
+---
+
+## 1. Project identity
+
+The flagship restricted-media retrieval engine of this workspace: one Telegram bot plus
+per-user MTProto userbot sessions that save, forward and re-caption protected media from
+private channels, forum topics and bot-only links. Sibling `../amit_restrict_bot/` is a separate
+customised deployment of the same engine with its own configuration and database — not a
+package and its fork, and not a shared runtime.
+
+Naming is split in source: the operator help banner reads `𝕃𝕌ℂ𝕀𝔽𝔼ℝ 𝕄𝕆ℝℕ𝕀ℕ𝔾𝕊𝕋𝔸ℝ`, the
+statistics header reads `ROYAL INFILTRATOR BOT STATISTICS`, while `README.md`, `ROADMAP.md`
+and `CHANGELOG.md` call the engine **Lucifer Infiltrator X**. All three refer to this directory.
+
+## 2. Purpose and scope
+
+- **In scope:** `/dl` single-link, link-range (`from - to`) and `from - all` retrieval; 24/7
+  watchers that mirror new posts from one source to many destinations; custom caption rules,
+  thumbnails, promotional-watermark cleaning and per-user session management.
+- **Out of scope:** multi-tenant SaaS, web dashboard, distributed workers, non-Telegram storage.
+
+## 3. Verified technology stack
+
+| Layer | Verified fact | Evidence |
+|---|---|---|
+| Runtime | Python 3.10 (`FROM python:3.10-slim`) | `Dockerfile`, `nixpacks.toml` |
+| MTProto | `pyrofork==2.3.45`, `pyromod`, `pyaes` | `requirements.txt` |
+| Database | MongoDB through `motor.motor_asyncio` | `restrict_bot.py` (`Database`) |
+| Support libs | `aiohttp` (health probe), `psutil` (telemetry), `dnspython`, `uvloop` | `requirements.txt` |
+| Container | Dockerfile (7zip, coreutils, build toolchain) and Nixpacks (`p7zip`) | `Dockerfile`, `nixpacks.toml` |
+| Tests | `tests/test_forwarder_engine.py`, 243 lines, 12 `test_` functions | file listing |
+| Not present | no Pillow, no ffmpeg/ffprobe, no aiogram | `requirements.txt`, imports |
+
+## 4. Actual entry points
+
+| Path | Role |
+|---|---|
+| `restrict_bot.py` (8,176 lines, 223 functions) | the only executable entry point: client setup, authorization, commands, download/upload engine, watchers, health probe |
+| `tests/test_forwarder_engine.py` | pytest engine tests |
+
+`Dockerfile` runs `python3 restrict_bot.py`; `nixpacks.toml` runs `python restrict_bot.py`.
+
+## 5. Architecture and modules
+
+Still one module, internally layered:
+
+- **Configuration** (top of file): `API_ID`, `API_HASH`, `BOT_TOKEN`, `DB_URI`, `DB_NAME`,
+  `LOG_CHANNEL`, `PORT`, `STATUS_UPDATE_INTERVAL` (15 s), `WAITING_TIME`, `LOGIN_SYSTEM`,
+  `MAX_TASKS_PER_USER`; `STRING_SESSION` is read but referenced nowhere else.
+- **Authorization**: `_parse_env_ids` builds `ADMINS` from `ADMINS`/`ADMIN`/`ADMIN_ID`/`ADMIN_IDS`,
+  `SUDOS`, `AUTH_USERS`, plus `OWNER_ID`/`OWNER`; `SUPER_ADMINS` gates admin commands and
+  `is_authorized()` gates ordinary users.
+- **`Database` class**: Motor client (`serverSelectionTimeoutMS=5000`), database name
+  `DB_NAME` or `restrict_bot`, collections `users`, `watchers`, `sync_progress`,
+  `saved_channels`, `settings`, `stats`, `replacements`, `source_thread`; `init_indexes()`
+  creates unique/inspection indexes on `users.id` and `saved_channels`
+  (`user_id, channel_id, channel_type, thread_id`).
+- **Clients**: the bot client `app`, plus `USER_CLIENTS[user_id]` userbot clients created
+  `in_memory=True` from string sessions stored in Mongo.
+- **Media pipeline**: link parsing and range expansion, filename extraction from
+  `DocumentAttributeFilename` and raw MTProto attributes (`extract_telegram_file_names`),
+  blocklist (`BLOCK_PART_REGEX` `part001`–`part999` plus standalone `.srt`), promotional
+  watermark regex and a 97-entry advertising/watermark name list, custom `/replace` rules, caption
+  templating, download-then-upload for restricted items, `FloodWait` handling with a thread
+  pool for blocking work.
+- **Watchers**: per-user `MessageHandler` on a dedicated userbot, multi-destination dispatch,
+  forum `thread_id` routing, content-type filters, `/watch`, `/watchers`, `/removetarget`,
+  `/removesource`.
+- **Operator surface**: `/status`, `/botstats`, `/log`, `/broadcast`, `/kickuser`,
+  `/setcommands`, `/cancel`, `/tasks`, `/channelstats`, `/mywatchers`, `/pixel`, `/toggledl`.
+- **Health probe**: `aiohttp` server binding `0.0.0.0:$PORT` (default 8080) answering `/` and
+  `/health` with `OK`, started as a background task.
+
+## 6. Execution flow
+
+1. `main()` → `cleanup_startup()`, `cleanup_watchdog()`, `app.start()`, `db.init_indexes()`,
+   `register_bot_commands()`, then restart every userbot that has a stored watcher, priming
+   each client against its source channels.
+2. `start_koyeb_health_check()` runs as a task; `idle()` keeps the bot alive; shutdown stops
+   the bot and all userbot clients.
+3. Command path: authorization gate → argument/link parse → task registration in
+   `TASK_QUEUE`/`batch_temp.ACTIVE_TASKS` → per-item download with the user session →
+   sanitise caption/filename → upload to the resolved destination → progress card refresh.
+4. Watcher path: new message on a watched source → blocklist check → caption/thumbnail
+   transformation → copy/forward to every route target, with `FloodWait` backoff.
+
+## 7. Persistence and integration boundaries
+
+- MongoDB (`DB_URI`, database `DB_NAME` → default `restrict_bot`) is the only store: users,
+  permissions, watcher routes, saved channels, replacements, thumbnails, sync progress.
+- Userbot string sessions are stored in that database, not on disk; `bot.log` is a runtime log
+  file (`/log` transmits it) and is not source.
+- Telegram (MTProto, bot + user clients) is the only external service; the HTTP health probe is
+  the only inbound socket and returns a static body.
+
+## 8. Architectural invariants
+
+- Keep the single-module layout until a split is explicitly approved; every handler shares the
+  same authorization, database and caption helpers.
+- Never bypass `is_authorized`/`is_admin` for a test or a favour.
+- Preserve range semantics (`from - to` inclusive, `from - all`, bot deep links, reply mode)
+  and resumable task state.
+- Preserve forum/topic routing (`thread_id`, `source_thread`) — never collapse it to plain
+  channel posting.
+- Keep the blocklist narrow and intentional: split `partNNN` chunks and standalone `.srt` are
+  dropped, numeric `.mkv.001`-style splits and `Part 1` titles are kept.
+- Stream where possible; only stage a file on disk when the transfer path requires it.
+
+## 9. Security requirements
+
+- All secrets are environment-only (`API_ID`, `API_HASH`, `BOT_TOKEN`, `DB_URI`,
+  `STRING_SESSION`, `LOG_CHANNEL`); never print, log, commit or paste them.
+- **Open-access fallback:** if neither `AUTH_USERS` nor `ADMINS` is configured, `is_authorized`
+  returns `True` for every user. Production deployments must set `OWNER_ID`/`ADMINS`.
+- `/log` transmits `bot.log` to an admin — treat it as potentially sensitive (peer IDs, user IDs).
+- Never copy a userbot session to `../amit_restrict_bot/` or any sibling; never expose it in
+  output, tickets or docs.
+- No destructive MongoDB operations and no re-seeding of live collections.
+
+## 10. Development decisions
+
+- **Dual client by design:** the bot client handles UI, the user session performs restricted
+  retrieval; the engine deliberately does not use a worker pool, so FloodWait is the binding
+  throughput constraint.
+- **Download-then-upload instead of pure forwarding** where a copy would carry the source
+  channel's restriction or formatting.
+- **Regex-first sanitisation** (watermarks, promotional URLs, filename normalisation) instead
+  of media re-encoding; consequently there is no Pillow/ffmpeg dependency.
+- **One module over a package:** fast iteration on a 8k-line engine was preferred over an
+  import graph; `AGENTS.md` records that a split must be proposed first.
+- **Roadmap claims are not shipped features.** `ROADMAP.md` marks 7-Zip archive extraction as
+  completed; no extraction code exists in `restrict_bot.py` (only `7z` in a filename-extension
+  list, plus the `7zip` package in the images). Adaptive backoff, topic resilience, session
+  health checks, multi-account rotation, distributed workers and a web dashboard are all
+  outstanding.
+
+## 11. Documentation references
+
+- [`../AGENTS.md`](../AGENTS.md) — workspace governance.
+- [`AGENTS.md`](AGENTS.md) — project rules, testing and Git protocol.
+- [`README.md`](README.md), [`ROADMAP.md`](ROADMAP.md), [`CHANGELOG.md`](CHANGELOG.md),
+  [`SECURITY.md`](SECURITY.md) — operator documentation and history (latest changelog entry
+  `2.4.0`, 2026-10-11).
+- [`GEMINI.md`](GEMINI.md) — Antigravity conventions.
+- [`../LUCIFER_WORKSPACE_MEMORY/projects/restrict-main/00_PROJECT_MASTER_PROFILE.md`](../LUCIFER_WORKSPACE_MEMORY/projects/restrict-main/00_PROJECT_MASTER_PROFILE.md)
+  — central profile.
+
+## 12. Verification date and corrections
+
+**Last Verified:** 2026-11-06, by direct source inspection. No test suite was run and no live
+transfer was performed; FloodWait behaviour remains unverified at runtime.
+
+Corrected in this revision:
+
+- "/batch command" — there is no `/batch` handler; batching is `/dl` with `from - to` or
+  `from - all` links. `/batch` appeared only in prose.
+- "64 automated unit tests" — the suite contains 12 test functions, not 64.
+- "Pillow (thumbnailing and watermarks)" and "ffmpeg/ffprobe" — neither is a dependency or an
+  import; thumbnails are set as uploaded photos, captions are regex-cleaned.
+- "gated strictly to ADMIN_ID" — the gate is `SUPER_ADMINS`/`AUTH_USERS` built from
+  `ADMINS`/`ADMIN`/`ADMIN_ID`/`ADMIN_IDS`, `SUDOS` and `OWNER_ID`/`OWNER`, with an open-access
+  fallback when nothing is configured.
+- "v2.5.0 (Production Stable)" — no version constant exists in source; `CHANGELOG.md` stops at
+  `2.4.0`.
+- The watcher/import subsystem, saved-channel memory and dual-tier title resolution described
+  previously are present and verified.
+
+Git: branch `main`, HEAD `abba1d8`; the working tree already carried `M .gitignore` and
+`?? AGENTS.md` from Phase 6 before this edit. Memory files are gitignored, so this rewrite does
+not appear in `git status`. Nothing was staged, committed or pushed.
+
+## 13. Caption Sanitisation & Foreign Promo Stripping (2026-11-08)
+
+- **Foreign Promotional Footers Stripping:** Implemented `strip_existing_media_footers()` in `restrict_bot.py`. Safely strips incoming `Size: ...`, `Join ...`, and all foreign channel/bot `Powered By : [\[ ᴍᴏᴠɪᴇꜱ ʙᴏᴛᴢ ᴜᴘᴅᴀᴛᴇ \]](...)` promotional lines, Unicode small caps, HTML tags, and markdown links.
+- **Markdown Title Unwrapping:** Updated `clean_promotional_hyperlinks()` to unwrap markdown-linked titles with nested brackets (e.g. `[Mr.Queen S01 [E16 - E20] ... .mkv](https://t.me/...)`), preserving inner bracket sets and extracting clean media filenames.
+- **Brand Footer Formatting (Restrict-main):** Attaches `[<filename>](https://t.me/luciferdatabase)` header and `⚜️ Powered By : [\[@luciferdatabase\]](https://t.me/luciferdatabase)` footer.
+- **White-Label Invariant (amit_restrict_bot):** Strips all promotional footers and foreign links, preserving only `💾 Size: {size_str}` without any `@luciferdatabase` or hyperlinks.
+- **Test Suite Verification:** Ran `pytest tests/test_forwarder_engine.py` on both repositories; 72/72 tests passed (100% pass rate).
+
+## 14. Lucifer Cloud Engine Cinematic Template Preservation (2026-11-12)
+
+- **Dedicated Cloud Engine Detection:** Added `is_lucifer_cloud_engine_caption()` to detect incoming messages originating from Lucifer Cloud Engine (`🎬 File Name:`, `━━━━━━━━━━━━━━━━━━━`, `💾 DB ID: [@LuciferDatabase]`, `[@RequestLuciferDatabase]`, `⚖️ Size:`).
+- **Template Preservation & Sanitisation:** Added `process_lucifer_cloud_engine_caption()`. Keeps the entire cloud engine block intact (dividers, specs, resolution, audio, join link, and file request link).
+- **Cleaned & Hyperlinked File Name:** Unwraps, cleans watermarks and rogue brackets from the filename, and hyper-links it to `https://t.me/luciferdatabase`.
+- **Rogue Promo Stripping:** Drops external foreign promo footers or links (e.g. Movies Botz) while strictly exempting and protecting `@LuciferDatabase` and `@RequestLuciferDatabase`.
+- **Footer Placement:** Appends `⚜️ Powered By : <a href="https://t.me/luciferdatabase">[@luciferdatabase]</a>` at the base. Does not append duplicate `💾 Size:`.
+- **Fallthrough Invariant:** Non-cloud engine messages continue with standard processing unimpeded.
+- **Verification:** 76/76 unit tests passed (100% pass rate).

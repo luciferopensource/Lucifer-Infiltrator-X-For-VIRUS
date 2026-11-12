@@ -1,0 +1,28 @@
+---
+# GitLab Changelog Configuration for Lucifer Infiltrator X
+# Documentation: https://docs.gitlab.com/ee/user/project/changelogs.html
+
+date_format: "%Y-%m-%d"
+
+template: |
+  {% if categories %}
+  {% for category in categories %}
+  ### {{ category.title }}
+
+  {% for entry in category.entries %}
+  - {{ entry.title }} ({% if entry.commit.short_id %}{{ entry.commit.short_id }}{% endif %}{% if entry.commit.short_id and entry.merge_request %}, {% endif %}{% if entry.merge_request %}!{{ entry.merge_request.iid }}{% endif %})
+  {% endfor %}
+
+  {% endfor %}
+  {% else %}
+  No changes documented.
+  {% endif %}
+
+categories:
+  feature: "Features"
+  fix: "Bug Fixes"
+  perf: "Performance Improvements"
+  security: "Security"
+  docs: "Documentation"
+  refactor: "Code Refactoring"
+  chore: "Maintenance & Tooling"

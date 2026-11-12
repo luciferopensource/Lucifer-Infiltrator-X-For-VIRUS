@@ -1,0 +1,12 @@
+[phases.setup]
+nixPkgs = ["python310", "gcc", "p7zip"]
+
+[phases.install]
+cmds = [
+    "python -m venv --copies /opt/venv",
+    ". /opt/venv/bin/activate && pip install --upgrade pip setuptools wheel",
+    ". /opt/venv/bin/activate && pip install -r requirements.txt"
+]
+
+[start]
+cmd = "python restrict_bot.py"

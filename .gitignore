@@ -1,0 +1,105 @@
+# Byte-compiled / optimised / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# C extensions and build artefacts
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Installer and runtime logs
+pip-log.txt
+pip-delete-this-directory.txt
+*.log
+bot.log
+logs/
+.logs/
+
+# Unit test / coverage reporting
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Environments and virtualenvs
+.env
+.env.*
+!.env.example
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Telegram session files & sensitive runtime state
+*.session
+*.session-journal
+sessions/
+downloads/
+temp/
+extracted/
+
+# Operating System artefacts
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# IDE and development tool metadata
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Docker artefacts
+.docker/
+
+# Personal AI Agent memory, guidelines, and local status files
+PROJECT_MEMORY.md
+PROJECT_STATUS.md
+GEMINI.md
+AGENTS.md
+.agents/
+.gemini/
+.env
+.env.*
+!.env.example
+
+# Phase 6: allow the project AGENTS.md to be versioned (exact file only)
+!AGENTS.md
+
+# Phase 9: allow the reconciled project memory file to be versioned (root file only)
+!PROJECT_MEMORY.md
