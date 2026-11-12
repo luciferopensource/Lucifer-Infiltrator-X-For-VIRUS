@@ -1745,21 +1745,41 @@ GENERIC_EXT_REGEX = re.compile(
 )
 
 def balance_html_tags(html: str) -> str:
+    """
+    Ensures HTML tags are balanced in proper LIFO nesting order and strips orphan closing tags.
+    Handles 'b', 'i', 'code', 'u', 's', 'pre', 'a'.
+    """
     if not html:
         return ""
-    tags = ['b', 'i', 'code', 'u', 's', 'pre', 'a']
-    for tag in tags:
-        open_count = len(re.findall(rf'<{tag}\b[^>]*>', html, re.IGNORECASE))
-        close_count = len(re.findall(rf'</{tag}>', html, re.IGNORECASE))
-        if open_count > close_count:
-            html += f"</{tag}>" * (open_count - close_count)
-        elif close_count > open_count:
-            diff = close_count - open_count
-            for _ in range(diff):
-                idx = html.rfind(f"</{tag}>")
-                if idx != -1:
-                    html = html[:idx] + html[idx + len(f"</{tag}>"):]
-    return html
+    tag_pattern = re.compile(r'<(/?)([a-zA-Z0-9]+)(?:\s+[^>]*)?>', re.IGNORECASE)
+    valid_tags = {'b', 'i', 'code', 'u', 's', 'pre', 'a'}
+    stack = []
+    output = []
+    last_idx = 0
+    for m in tag_pattern.finditer(html):
+        is_close = bool(m.group(1))
+        tag = m.group(2).lower()
+        if tag not in valid_tags:
+            continue
+        output.append(html[last_idx:m.start()])
+        last_idx = m.end()
+        if not is_close:
+            stack.append(tag)
+            output.append(m.group(0))
+        else:
+            for i in range(len(stack) - 1, -1, -1):
+                if stack[i] == tag:
+                    while len(stack) > i + 1:
+                        pop_t = stack.pop()
+                        output.append(f"</{pop_t}>")
+                    stack.pop()
+                    output.append(f"</{tag}>")
+                    break
+    output.append(html[last_idx:])
+    while stack:
+        pop_t = stack.pop()
+        output.append(f"</{pop_t}>")
+    return "".join(output)
 
 def parse_media_extension_and_split(text: str):
     m = SPLIT_EXT_REGEX.search(text)
