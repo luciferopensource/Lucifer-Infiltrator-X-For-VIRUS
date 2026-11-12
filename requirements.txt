@@ -3,6 +3,7 @@ setuptools
 pyrofork==2.3.45
 pyromod
 pyaes
+tgcrypto
 motor
 aiohttp
 psutil

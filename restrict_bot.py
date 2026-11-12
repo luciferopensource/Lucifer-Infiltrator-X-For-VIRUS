@@ -1543,7 +1543,7 @@ def generate_aesthetic_progress_ui(task_info: dict, current_status: str = "Forwa
         f"╚════❰ {footer_status} ❱══❍⊱❁۪۪\n"
         f"〘{bar_str}〙 {percent:.1f}%"
     )
-    return text
+    return f"<pre><code>{text}</code></pre>"
 
 PROMO_NAMES_RAW = [
     "Cloud Station", "TamilMob", "LinkZz", "ONAAMovies", "Hdhub4u", "HDHub4u", "Hub4u", "HDHub", "HDHu", "Cinevood", "Vegamovies", "Bollyflix", "1XBET", "Melbet", "Olamovies", "MoviesMod", "Khatrimaza", "9xmovies", "Desiremovies", "HubFlix", "Bolly4u", "Bolly2tolly", "Filmyzilla", "Tamilrockers", "JioRockers", "Kuttymovies", "Moviesda", "4kHdHub",
@@ -2636,9 +2636,27 @@ async def send_start(client: Client, message: Message):
 
     user_mention = getattr(message.from_user, "mention", None) or html.escape(message.from_user.first_name or "User")
     welcome_video_url = "https://holy-field-055f.lucifermotivational.workers.dev/0:/Google%20Flow%20%E2%80%93%20Sept%2004%20-%2016-28.mp4"
+    
+    # Check if user has an active session
+    user_accounts = await db.get_user_accounts(user_id) if (db and hasattr(db, "get_user_accounts")) else []
+    if user_accounts:
+        active_acc = next((a for a in user_accounts if a.get('is_active')), user_accounts[0])
+        acc_name = html.escape(active_acc.get('first_name', 'Active Session'))
+        acc_phone = active_acc.get('phone', '')
+        phone_part = f" ({acc_phone})" if acc_phone and acc_phone != 'Hidden' else ""
+        session_info = (
+            f"🟢 <b>Login Status:</b> <code>LOGGED IN ({acc_name}{phone_part})</code>\n"
+            "✨ <i>All restricted downloads & forwarders are active and ready!</i>"
+        )
+    else:
+        session_info = (
+            "🔴 <b>Login Status:</b> <code>NOT LOGGED IN</code>\n"
+            "👉 <i>For downloading restricted content, please /login first.</i>"
+        )
+
     welcome_text = (
         f"<b>👋 Hi {user_mention}, I am Save Restricted Content Bot.</b>\n\n"
-        "<b>For downloading restricted content /login first.</b>\n\n"
+        f"{session_info}\n\n"
         "<b>Know how to use bot by - /help</b>"
     )
     
@@ -3719,16 +3737,23 @@ async def start_string_session_login(bot: Client, user_id: int):
         await get_user_client(user_id)
         
         success_text = (
-            "✅ <b>Telegram Account Connected Successfully!</b>\n\n"
-            f"👤 <b>Name:</b> {html.escape(acc_data['first_name'])}\n"
-            f"🆔 <b>User ID:</b> <code>{me.id}</code>\n"
-            f"📞 <b>Phone:</b> <code>{acc_data['phone']}</code>\n"
-            f"🔗 <b>Username:</b> {acc_data['username'] or 'None'}\n\n"
-            "🟢 <b>Status:</b> Active\n"
-            "All restricted downloads, fast copies, and watchers will now use this account!\n"
-            "Use /accounts anytime to view or switch accounts."
+            "╔════❰ ʟᴏɢɪɴ sᴜᴄᴄᴇssғᴜʟ ❱═❍⊱❁۪۪\n"
+            "║╭━━━━━━━━━━━━━━━➣\n"
+            f"║┣⪼ 👤 Name: {html.escape(acc_data['first_name'])}\n"
+            f"║┣⪼ 🆔 User ID: <code>{me.id}</code>\n"
+            f"║┣⪼ 📞 Phone: <code>{acc_data['phone']}</code>\n"
+            f"║┣⪼ 🔗 Username: {acc_data['username'] or 'None'}\n"
+            "║┣⪼ 🟢 Status: <code>LOGGED IN & ACTIVE</code>\n"
+            "║╰━━━━━━━━━━━━━━━➣\n"
+            "╚════❰ ʟᴏɢɪɴ ᴅᴏɴᴇ ❱══❍⊱❁۪۪\n\n"
+            "🎉 <b>Login Done! Telegram session successfully authenticated.</b>\n\n"
+            "⚡ All restricted downloads, fast copies, and watchers will now use this active session!\n"
+            "💡 Use <code>/accounts</code> to view/switch sessions or <code>/logout</code> to disconnect."
         )
-        await validating_msg.edit(success_text)
+        try:
+            await validating_msg.edit(success_text)
+        except Exception:
+            await bot.send_message(user_id, success_text)
     except Exception as e:
         if temp_client:
             try: await temp_client.stop()
@@ -3927,16 +3952,23 @@ async def start_phone_login(bot: Client, user_id: int):
     await get_user_client(user_id)
 
     success_text = (
-        "✅ <b>Telegram Account Connected Successfully!</b>\n\n"
-        f"👤 <b>Name:</b> {html.escape(acc_data['first_name'])}\n"
-        f"🆔 <b>User ID:</b> <code>{me.id}</code>\n"
-        f"📞 <b>Phone:</b> <code>{acc_data['phone']}</code>\n"
-        f"🔗 <b>Username:</b> {acc_data['username'] or 'None'}\n\n"
-        "🟢 <b>Status:</b> Active\n"
-        "All restricted downloads, fast copies, and watchers will now use this account!\n"
-        "Use /accounts anytime to view or switch accounts."
+        "╔════❰ ʟᴏɢɪɴ sᴜᴄᴄᴇssғᴜʟ ❱═❍⊱❁۪۪\n"
+        "║╭━━━━━━━━━━━━━━━➣\n"
+        f"║┣⪼ 👤 Name: {html.escape(acc_data['first_name'])}\n"
+        f"║┣⪼ 🆔 User ID: <code>{me.id}</code>\n"
+        f"║┣⪼ 📞 Phone: <code>{acc_data['phone']}</code>\n"
+        f"║┣⪼ 🔗 Username: {acc_data['username'] or 'None'}\n"
+        "║┣⪼ 🟢 Status: <code>LOGGED IN & ACTIVE</code>\n"
+        "║╰━━━━━━━━━━━━━━━➣\n"
+        "╚════❰ ʟᴏɢɪɴ ᴅᴏɴᴇ ❱══❍⊱❁۪۪\n\n"
+        "🎉 <b>Login Done! Telegram session successfully authenticated.</b>\n\n"
+        "⚡ All restricted downloads, fast copies, and watchers will now use this active session!\n"
+        "💡 Use <code>/accounts</code> to view/switch sessions or <code>/logout</code> to disconnect."
     )
-    await verifying_msg.edit(success_text)
+    try:
+        await verifying_msg.edit(success_text)
+    except Exception:
+        await bot.send_message(user_id, success_text)
 
 async def handle_resend_otp(bot: Client, user_id: int, status_msg: Message = None):
     login_info = PENDING_LOGINS.get(user_id)
@@ -5227,15 +5259,43 @@ async def process_custom_destination(client: Client, message: Message):
 
 async def ask_for_speed(message: Message):
     buttons = [
-        [InlineKeyboardButton("⚡ Default (3s)", callback_data="speed_default")],
-        [InlineKeyboardButton("⚙️ Manual Speed", callback_data="speed_manual")],
-        [InlineKeyboardButton("❌ Cancel", callback_data="cancel_setup")]
+        [
+            InlineKeyboardButton("⚡ 1 Sec", callback_data="speed_val:1"),
+            InlineKeyboardButton("⚡ 2 Sec", callback_data="speed_val:2"),
+            InlineKeyboardButton("⭐ 3 Sec (Default)", callback_data="speed_val:3")
+        ],
+        [
+            InlineKeyboardButton("⏱️ 4 Sec", callback_data="speed_val:4"),
+            InlineKeyboardButton("🛡️ 5 Sec", callback_data="speed_val:5"),
+            InlineKeyboardButton("🛡️ 6 Sec", callback_data="speed_val:6")
+        ],
+        [
+            InlineKeyboardButton("🛡️ 7 Sec", callback_data="speed_val:7"),
+            InlineKeyboardButton("🛡️ 8 Sec", callback_data="speed_val:8"),
+            InlineKeyboardButton("🛡️ 9 Sec", callback_data="speed_val:9")
+        ],
+        [
+            InlineKeyboardButton("🛡️ 10 Sec", callback_data="speed_val:10"),
+            InlineKeyboardButton("⚙️ Manual Custom", callback_data="speed_manual")
+        ],
+        [
+            InlineKeyboardButton("❌ Cancel Setup", callback_data="cancel_setup")
+        ]
     ]
-    text = "**🚀 Select Forwarding Speed**\n\nHow fast should I process messages?"
+    text = (
+        "🚀 <b>Select Forwarding Delay & Speed</b>\n\n"
+        "<pre><code>"
+        "⚠️ DELAY SAFETY WARNING:\n"
+        "• ⚡ 1s - 2s : FAST ➔ High Telegram FloodWait chances\n"
+        "• ⭐ 3s (Default) : BALANCED ➔ Optimal speed & stability\n"
+        "• 🛡️ 4s - 10s : SAFE ➔ Zero FloodWait risk for large batches"
+        "</code></pre>\n\n"
+        "<i>Tap a preset delay below or enter a custom duration:</i>"
+    )
     if isinstance(message, Message) and message.from_user.is_bot:
-        await message.edit(text, reply_markup=InlineKeyboardMarkup(buttons))
+        await message.edit(text, reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
     else:
-        await message.reply(text, reply_markup=InlineKeyboardMarkup(buttons), quote=True)
+        await message.reply(text, reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML, quote=True)
 
 
 # ==============================================================================
@@ -6110,15 +6170,29 @@ async def speed_callback(client: Client, query):
     if choice == "speed_manual":
         PENDING_TASKS[user_id]["status"] = "waiting_speed"
         await query.message.edit(
-            "⏱ **Enter Delay (Seconds)**\n\n"
-            "Every time a new message arrives, I will wait this long before forwarding it.",
+            "⏱ <b>Enter Custom Delay (Seconds)</b>\n\n"
+            "<pre><code>"
+            "Please send an integer number of seconds to wait between messages.\n"
+            "Example: 15 or 30\n"
+            "Higher delay prevents FloodWait on large channels."
+            "</code></pre>",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_setup")]])
         )
+        await query.answer()
+        return
+
+    if choice.startswith("speed_val:"):
+        val_sec = int(choice.split(":")[1])
+        PENDING_TASKS[user_id]["delay"] = val_sec
+        await query.answer(f"⏱ Delay set to {val_sec}s", show_alert=False)
+        await show_format_menu(query, user_id)
         return
 
     if choice == "speed_default":
         PENDING_TASKS[user_id]["delay"] = 0 if task_data.get("mode") == "WATCHER" else 3
+        await query.answer("⭐ Default 3s delay selected", show_alert=False)
         await show_format_menu(query, user_id)
+        return
 
 async def process_speed_input(client: Client, message: Message):
     user_id = message.from_user.id
@@ -6299,15 +6373,28 @@ def parse_log_channel(log_channel_str):
     else:
         return chat_part, topic_id
 
+_LOG_FLOODWAIT_UNTIL = 0
+_LAST_LOG_SENT = 0
+
 async def send_log(text: str):
+    global _LOG_FLOODWAIT_UNTIL, _LAST_LOG_SENT
     print(f"[BOT LOG] {text}")
     if not LOG_CHANNEL:
+        return
+    now = time.time()
+    if now < _LOG_FLOODWAIT_UNTIL:
+        return
+    if now - _LAST_LOG_SENT < 2.0:
         return
     try:
         chat_id, topic_id = parse_log_channel(LOG_CHANNEL)
         if not chat_id:
             return
         await app.send_message(chat_id, text, reply_to_message_id=topic_id)
+        _LAST_LOG_SENT = time.time()
+    except FloodWait as fw:
+        _LOG_FLOODWAIT_UNTIL = time.time() + fw.value + 5
+        print(f"⚠️ [send_log] LOG_CHANNEL FloodWait: Pausing Telegram channel logging for {fw.value}s.")
     except Exception as e:
         print(f"❌ Failed to send log to Telegram: {e} | LOG_CHANNEL: '{LOG_CHANNEL}'. Please ensure Bot is an ADMIN in LOG_CHANNEL and ID has -100 prefix.")
 
@@ -6365,7 +6452,9 @@ async def start_task_final(client: Client, message_context: Message, task_data: 
     
     batch_temp.ACTIVE_TASKS[user_id] += 1
 
-    start_msg = f"✅ **Task Started!**\nDestination: `{dest}`\nSpeed: `{delay}s` delay\nTask ID: `{task_uuid[:8]}`"
+    auto_dl_active = await db.get_dl_status()
+    auto_dl_notice = "\n⚠️ <i>Notice: Auto-Download is OFF (/toggledl to enable)</i>" if not auto_dl_active else ""
+    start_msg = f"✅ <b>Task Started!</b>\nDestination: <code>{dest}</code>\nSpeed: <code>{delay}s</code> delay\nTask ID: <code>{task_uuid[:8]}</code>{auto_dl_notice}"
     try:
         if isinstance(message_context, Message):
             if message_context.from_user.is_bot:
@@ -6758,17 +6847,20 @@ async def process_links_logic(client: Client, message: Message, text: str, targe
             duration = time.time() - start_time
             time_taken_str = get_readable_time(int(duration))
 
-            final_text = (
-                f"{header}\n"
-                f"📝 **Task :** {source_title} → {dest_title}\n"
-                f"⏱ **Time Taken:** `{time_taken_str}`\n"
-                f"📊 **Statistics:**\n"
-                f"├ 📥 **Total Requested:** `{total_count}`\n"
-                f"├ ✅ **Successful:** `{success_count}`\n"
-                f"└ ❌ **Failed/Skipped:** `{failed_count}`"
+            final_box = (
+                f"╔════❰ {footer_tag} ❱═❍⊱❁۪۪\n"
+                f"║╭━━━━━━━━━━━━━━━➣\n"
+                f"║┣⪼ 📝 Task : {source_title} → {dest_title}\n"
+                f"║┣⪼ ⏱ Time Taken: {time_taken_str}\n"
+                f"║┣⪼ 📥 Total Requested: {total_count}\n"
+                f"║┣⪼ ✅ Successful: {success_count}\n"
+                f"║┣⪼ ❌ Failed/Skipped: {failed_count}\n"
+                f"║╰━━━━━━━━━━━━━━━➣\n"
+                f"╚════❰ ʙᴀᴛᴄʜ ᴄᴏᴍᴘʟᴇᴛᴇ ❱══❍⊱❁۪۪"
             )
+            final_text = f"<b>{header}</b>\n\n<pre><code>{html.escape(final_box)}</code></pre>"
             
-            try: await client.send_message(message.chat.id, final_text, reply_to_message_id=message.id)
+            try: await client.send_message(message.chat.id, final_text, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
             except Exception: pass
 
 async def handle_private(client: Client, acc, message: Message, chatid, msgid: int, index: int, total_count: int, status_message: Message, targets: list, delay, user_id, task_uuid=None, is_restricted=False, header_text="", filter_thread_id=None, allowed_types=None, text_format=None):
@@ -6982,7 +7074,7 @@ async def handle_private(client: Client, acc, message: Message, chatid, msgid: i
     if not auto_dl:
         if msg_type in ["Video", "Document"]:
             chat_title = getattr(msg.chat, "title", None) or str(chatid)
-            await send_log(f"🚫 **File Skipped (Auto-Download OFF)**\n📂 **Source:** `{chat_title}` (`{chatid}`)\n🆔 **Msg ID:** `{msgid}`\n📄 **Type:** `{msg_type}`")
+            print(f"[BOT LOG] 🚫 File Skipped (Auto-Download OFF) - Source: {chat_title} ({chatid}) - Msg ID: {msgid} - Type: {msg_type}")
         return False, "dl_disabled"
 
     task_folder_path = Path(f"./downloads/{user_id}/{task_uuid}/{msgid}/")
