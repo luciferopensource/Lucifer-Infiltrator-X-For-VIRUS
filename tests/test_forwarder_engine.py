@@ -23,6 +23,7 @@ from restrict_bot import (
     BLOCK_PART_REGEX,
     WATERMARK_CLEAN_REGEX,
     clean_promotional_watermarks,
+    clean_promotional_hyperlinks,
     is_standalone_subtitle_file,
     should_drop_file,
     extract_telegram_file_names,
@@ -32,6 +33,8 @@ from restrict_bot import (
     strip_existing_media_footers,
     is_lucifer_cloud_engine_caption,
     process_lucifer_cloud_engine_caption,
+    balance_html_tags,
+    append_media_footer,
     parse_media_extension_and_split
 )
 
@@ -291,6 +294,19 @@ class TestMetadataInspection:
         blocked, _, _ = is_message_blocked(msg)
         assert blocked is False
 
+    def test_movie_with_srt_in_caption_not_blocked(self):
+        # A valid video file with DocumentAttributeFilename must NOT be dropped
+        # simply because caption text mentions a subtitle file
+        msg = MockMessage(
+            video=MockMedia(
+                file_name="Avatar.2009.1080p.mkv",
+                attributes=[MockDocumentAttributeFilename(file_name="Avatar.2009.1080p.mkv")]
+            ),
+            caption="Avatar (2009)\nSubtitles: English.srt"
+        )
+        blocked, reason, matched = is_message_blocked(msg)
+        assert blocked is False
+
 
 class TestLuciferCloudEngineCaption:
     """
@@ -377,3 +393,42 @@ class TestLuciferCloudEngineCaption:
         assert '<a href="https://t.me/luciferdatabase">' in res
         assert "💾 Size: 100.00 MB" in res
         assert "⚜️ Powered By : <a href=\"https://t.me/luciferdatabase\">[@luciferdatabase]</a>" in res
+
+
+class TestAuditedEdgeCases:
+    """
+    Tests covering bugs and edge cases uncovered during the senior auditor review.
+    """
+
+    def test_balance_html_tags_with_anchor_and_orphans(self):
+        # 1. Unclosed anchor
+        unclosed = 'Watch <a href="https://t.me/luciferdatabase">Avatar 1080p'
+        balanced = balance_html_tags(unclosed)
+        assert balanced == 'Watch <a href="https://t.me/luciferdatabase">Avatar 1080p</a>'
+
+        # 2. Orphan closing tag
+        orphan = 'Avatar 1080p</b></a>'
+        cleaned = balance_html_tags(orphan)
+        assert cleaned == 'Avatar 1080p'
+
+    def test_clean_promotional_hyperlinks_no_dangling_https(self):
+        raw = "Download now from https://t.me/+wiERZq-x3KBmOGU9 for free!"
+        res = clean_promotional_hyperlinks(raw)
+        assert "https://" not in res
+        assert "wiERZq" not in res
+        assert "for free!" in res
+
+    def test_multi_markdown_links_on_single_line_not_corrupted(self):
+        raw = "Check [Link 1](https://google.com) and [Link 2](https://github.com) here"
+        res = clean_promotional_hyperlinks(raw)
+        assert "Link 1" in res
+        assert "Link 2" in res
+        assert "](" not in res
+
+    def test_caption_truncation_rebalances_html(self):
+        long_title = '<a href="https://t.me/luciferdatabase">' + ("A" * 1050) + '</a>'
+        res = append_media_footer(long_title, file_size_bytes=1024)
+        assert len(res) <= 1024
+        open_a = len(re.findall(r'<a\b[^>]*>', res))
+        close_a = len(re.findall(r'</a>', res))
+        assert open_a == close_a

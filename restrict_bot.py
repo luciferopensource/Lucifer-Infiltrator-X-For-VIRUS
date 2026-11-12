@@ -1619,7 +1619,7 @@ def clean_promotional_watermarks(text: str) -> str:
     if not text:
         return ""
     cleaned = WATERMARK_CLEAN_REGEX.sub('', text)
-    cleaned = re.sub(r'(\s*-\s*)+', ' - ', cleaned)
+    cleaned = re.sub(r'(?:\s*-\s*){2,}', ' - ', cleaned)
     cleaned = re.sub(r'[\s\-_–—|]+(?=\.[a-zA-Z0-9]+)', '', cleaned)
     cleaned = re.sub(r'^\s*[-_–—|:.,\s]+', '', cleaned)
     cleaned = re.sub(r'\s*[-_–—|:.,\s]+$', '', cleaned)
@@ -1684,19 +1684,20 @@ def extract_telegram_file_names(message) -> list[str]:
                 elif getattr(attr, "file_name", None) and isinstance(attr.file_name, str):
                     names.append(attr.file_name.strip())
 
-    # 3. Caption / text lines inspection fallback
-    if getattr(message, "caption", None):
-        cap_str = message.caption.html if hasattr(message.caption, "html") else str(message.caption)
-        for line in cap_str.splitlines():
-            line_clean = re.sub(r'<[^>]+>', '', line).strip()
-            if line_clean:
-                names.append(line_clean)
-    elif getattr(message, "text", None):
-        txt_str = message.text.html if hasattr(message.text, "html") else str(message.text)
-        for line in txt_str.splitlines():
-            line_clean = re.sub(r'<[^>]+>', '', line).strip()
-            if line_clean:
-                names.append(line_clean)
+    # 3. Caption / text lines inspection fallback (only when no media attribute filenames found)
+    if not names:
+        if getattr(message, "caption", None):
+            cap_str = message.caption.html if hasattr(message.caption, "html") else str(message.caption)
+            for line in cap_str.splitlines():
+                line_clean = re.sub(r'<[^>]+>', '', line).strip()
+                if line_clean:
+                    names.append(line_clean)
+        elif getattr(message, "text", None):
+            txt_str = message.text.html if hasattr(message.text, "html") else str(message.text)
+            for line in txt_str.splitlines():
+                line_clean = re.sub(r'<[^>]+>', '', line).strip()
+                if line_clean:
+                    names.append(line_clean)
 
     return list(dict.fromkeys(names))
 
@@ -1746,12 +1747,18 @@ GENERIC_EXT_REGEX = re.compile(
 def balance_html_tags(html: str) -> str:
     if not html:
         return ""
-    tags = ['b', 'i', 'code', 'u', 's', 'pre']
+    tags = ['b', 'i', 'code', 'u', 's', 'pre', 'a']
     for tag in tags:
         open_count = len(re.findall(rf'<{tag}\b[^>]*>', html, re.IGNORECASE))
         close_count = len(re.findall(rf'</{tag}>', html, re.IGNORECASE))
         if open_count > close_count:
             html += f"</{tag}>" * (open_count - close_count)
+        elif close_count > open_count:
+            diff = close_count - open_count
+            for _ in range(diff):
+                idx = html.rfind(f"</{tag}>")
+                if idx != -1:
+                    html = html[:idx] + html[idx + len(f"</{tag}>"):]
     return html
 
 def parse_media_extension_and_split(text: str):
@@ -1835,7 +1842,7 @@ def clean_promotional_hyperlinks(text_html: str) -> str:
     unwrapped_lines = []
     for line in lines:
         stripped = line.strip()
-        m_full = re.match(r'^\s*\[(?P<anchor>.*)\]\((?P<url>https?://[^\s\)]+)\)\s*$', stripped)
+        m_full = re.match(r'^\s*\[(?P<anchor>(?:[^\[\]]|\[[^\]]*\])*)\]\((?P<url>https?://[^\s\)]+)\)\s*$', stripped)
         if m_full:
             anc = m_full.group('anchor').strip()
             href = m_full.group('url').strip()
@@ -1882,7 +1889,7 @@ def clean_promotional_hyperlinks(text_html: str) -> str:
             return ""
         return anchor
 
-    text_html = re.compile(r'\[+([^\]]+)\]+\((https?://[^\)]+)\)').sub(replace_md_link, text_html)
+    text_html = re.compile(r'\[+((?:[^\[\]]|\[[^\]]*\])+)\]+\((https?://[^\)]+)\)').sub(replace_md_link, text_html)
 
     # 2. Unwrap HTML links <a href="url">anchor</a>
     def replace_html_link(match):
@@ -1906,7 +1913,8 @@ def clean_promotional_hyperlinks(text_html: str) -> str:
 
     cleaned = LINK_PATTERN.sub(replace_html_link, text_html)
     cleaned = PROMO_DOMAIN_REGEX.sub("", cleaned)
-    cleaned = re.sub(r'(?i)\b(?:t\.me|telegram\.me|telegram\.dog)/[a-zA-Z0-9_+\-/?=]+', '', cleaned)
+    cleaned = re.sub(r'(?i)(?:https?://)?\b(?:t\.me|telegram\.me|telegram\.dog)/(?!luciferdatabase\b|RequestLuciferDatabase\b)[a-zA-Z0-9_+\-/?=]+', '', cleaned)
+    cleaned = re.sub(r'https?://(?=[\s\.,;:\-\(\)\[\]]|$)', '', cleaned)
     cleaned = re.sub(r'(?i)\b(?:join|link|channel|backup channel|official channel)\s*:\s*', '', cleaned)
     return cleaned
 
@@ -1978,7 +1986,10 @@ def append_media_footer(caption: str, file_size_bytes: int = 0) -> str:
     # Enforce Telegram 1024-character caption limit
     if len(caption) + len(footer) > 1024:
         avail = 1024 - len(footer)
-        caption = caption[:avail].rstrip()
+        caption = balance_html_tags(caption[:avail].rstrip())
+        while len(caption) + len(footer) > 1024 and avail > 0:
+            avail -= (len(caption) + len(footer) - 1024)
+            caption = balance_html_tags(caption[:avail].rstrip())
 
     return f"{caption}{footer}"
 
@@ -3161,7 +3172,7 @@ async def status_style_handler(client, message):
             dst = info.get("dest_title_name", "Destination")
             queue_list.append(f"• {src} → {dst}")
     
-    watcher_count = await db.db.watchers.count_documents({})
+    watcher_count = await db.db.watchers.count_documents({}) if (db and db.db is not None) else 0
     queue_text = "\n".join(queue_list) if queue_list else "😴 No active downloads."
     
     auto_dl = "ON ✅" if await db.get_dl_status() else "OFF ❌"
@@ -7871,7 +7882,7 @@ async def process_media_album(client, chat_id, media_group_id, watcher, targets)
             try: await app.send_message(owner_id, f"❌ **Album forward failed:** <code>{e}</code>")
             except Exception: pass
         finally:
-            shutil.rmtree(album_folder, ignore_errors=True)
+            await asyncio.to_thread(shutil.rmtree, album_folder, ignore_errors=True)
 
 async def process_watcher_message(client, message):
     chat_id = message.chat.id
@@ -8323,19 +8334,18 @@ async def main():
             await user_client.start()
             USER_CLIENTS[user_id] = user_client
             
-            async for w in db.db.watchers.find({'user_id': user_id}):
-                target_source = w['source_id']
-                try: 
-                    await user_client.get_chat_member(target_source, "me")
-                except Exception as e: 
-                    pass
-
-            async for w in db.db.watchers.find({'user_id': user_id}):
-                try: 
-                    await user_client.get_chat(w['source_id'])
-                    async for _ in user_client.get_chat_history(w['source_id'], limit=1): break
-                except Exception as e: 
-                    pass
+            if db and db.db is not None:
+                user_watchers = await db.db.watchers.find({'user_id': user_id}).to_list(length=None)
+                for w in user_watchers:
+                    target_source = w.get('source_id')
+                    if target_source:
+                        try:
+                            await user_client.get_chat_member(target_source, "me")
+                            await user_client.get_chat(target_source)
+                            async for _ in user_client.get_chat_history(target_source, limit=1):
+                                break
+                        except Exception:
+                            pass
             
         except Exception as e:
             pass
