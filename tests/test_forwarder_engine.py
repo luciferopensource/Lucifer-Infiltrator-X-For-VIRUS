@@ -30,6 +30,7 @@ from restrict_bot import (
     is_message_blocked,
     sanitize_filename,
     smart_caption,
+    apply_text_format,
     strip_existing_media_footers,
     is_lucifer_cloud_engine_caption,
     process_lucifer_cloud_engine_caption,
@@ -478,4 +479,15 @@ class TestAuditedEdgeCases:
         has_protected_content = False
         allow_fast_copy = not has_protected_content
         assert allow_fast_copy is True
+
+    def test_text_format_bold_italic_keeps_hyperlink(self):
+        base = '<a href="https://t.me/luciferdatabase">Movie.mkv</a>'
+        out = apply_text_format(base, ["Bold", "Italic"])
+        assert out == '<b><i><a href="https://t.me/luciferdatabase">Movie.mkv</a></i></b>'
+
+    def test_text_format_mono_strips_hyperlinks(self):
+        base = '<a href="https://t.me/luciferdatabase">Movie.mkv</a>'
+        out = apply_text_format(base, ["Mono"])
+        assert out == "<code>Movie.mkv</code>"
+        assert "<a href" not in out
 

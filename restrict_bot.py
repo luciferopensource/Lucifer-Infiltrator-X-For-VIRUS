@@ -2371,6 +2371,24 @@ def smart_caption(text_html, file_size_bytes=0, link_fallback=False):
 
 
 
+def apply_text_format(caption: str, formats) -> str:
+    """Bold/Italic may wrap hyperlinks; <code> cannot contain a link, so Mono strips tags.
+    Cloud Engine templates are never reformatted."""
+    if not caption or not formats:
+        return caption
+    if is_lucifer_cloud_engine_caption(caption):
+        return caption
+    if "Italic" in formats:
+        caption = f"<i>{caption}</i>"
+    if "Bold" in formats:
+        caption = f"<b>{caption}</b>"
+    if "Mono" in formats:
+        if "<a " in caption:
+            caption = re.sub(r'<[^>]+>', '', caption)
+        caption = f"<code>{caption}</code>"
+    return caption
+
+
 async def check_link_restriction(user_id, link_text):
     clean_text = link_text.replace("https://", "").replace("http://", "").replace("t.me/", "").replace("c/", "")
     
@@ -7000,14 +7018,7 @@ async def handle_private(client: Client, acc, message: Message, chatid, msgid: i
         if fallback_fn:
             clean_caption = smart_caption(fallback_fn, link_fallback=True)
 
-    if text_format:
-        if "<a " not in clean_caption:
-            if "Mono" in text_format:
-                clean_caption = f"<code>{clean_caption}</code>"
-            if "Italic" in text_format:
-                clean_caption = f"<i>{clean_caption}</i>"
-            if "Bold" in text_format:
-                clean_caption = f"<b>{clean_caption}</b>"
+    clean_caption = apply_text_format(clean_caption, text_format)
 
     if msg_type != "Text":
         clean_caption = append_media_footer(clean_caption, media_file_size)
@@ -7974,10 +7985,7 @@ async def process_media_album(client, chat_id, media_group_id, watcher, targets)
             break
 
     clean_caption = smart_caption(original_caption, link_fallback=True)
-    if text_format:
-        if "Mono" in text_format: clean_caption = f"<code>{clean_caption}</code>"
-        if "Italic" in text_format: clean_caption = f"<i>{clean_caption}</i>"
-        if "Bold" in text_format: clean_caption = f"<b>{clean_caption}</b>"
+    clean_caption = apply_text_format(clean_caption, text_format)
 
     clean_caption = await apply_user_replacements(clean_caption, owner_id)
 
@@ -8208,10 +8216,7 @@ async def process_watcher_message(client, message):
             if msg_type == "Text":
                 original_caption = message.text.html if message.text else ""
                 clean_caption = smart_caption(original_caption)
-                if text_format:
-                    if "Mono" in text_format: clean_caption = f"<code>{clean_caption}</code>"
-                    if "Italic" in text_format: clean_caption = f"<i>{clean_caption}</i>"
-                    if "Bold" in text_format: clean_caption = f"<b>{clean_caption}</b>"
+                clean_caption = apply_text_format(clean_caption, text_format)
                 clean_caption = await apply_user_replacements(clean_caption, owner_id)
                 for t in targets:
                     dest_chat = t['dest_id']
@@ -8275,10 +8280,7 @@ async def process_watcher_message(client, message):
                 if fallback_fn:
                     clean_caption = smart_caption(fallback_fn, link_fallback=True)
 
-            if text_format:
-                if "Mono" in text_format: clean_caption = f"<code>{clean_caption}</code>"
-                if "Italic" in text_format: clean_caption = f"<i>{clean_caption}</i>"
-                if "Bold" in text_format: clean_caption = f"<b>{clean_caption}</b>"
+            clean_caption = apply_text_format(clean_caption, text_format)
 
             clean_caption = append_media_footer(clean_caption, media_file_size)
             clean_caption = await apply_user_replacements(clean_caption, owner_id)

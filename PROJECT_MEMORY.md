@@ -252,6 +252,7 @@ Comprehensive code audit conducted by Senior Software Engineer and Code Auditor.
 - **Dual-Remote Upstream Synchronization:** Synced and configured remotes for both GitLab (`git@gitlab.com:luciferopensource/Lucifer-InfiltratorX-For-Virus.git`) and GitHub (`git@github.com:luciferopensource/Lucifer-Infiltrator-X-For-VIRUS.git`).
 - **Bridge Sender Peer Fix:** the bridge message is read from the userbot account id (`acc.me.id`), not the bot-owner user id, so multi-account logins work correctly.
 - **Extension-less media names:** normal media without a recognised extension (e.g. `...AV1-YiFaN`) now receives the filename hyperlink through `link_fallback`, matching the branded format.
-- **Verification:** All 87 test cases passing in `tests/test_forwarder_engine.py` (100% pass rate).
+- **Text formatting:** Bold/Italic may wrap the filename hyperlink; Mono is emitted as plain `<code>` without a link; Cloud Engine templates are never reformatted.
+- **Verification:** All 89 test cases passing in `tests/test_forwarder_engine.py` (100% pass rate).
 
 
