@@ -6981,12 +6981,13 @@ async def handle_private(client: Client, acc, message: Message, chatid, msgid: i
             clean_caption = smart_caption(fallback_fn)
 
     if text_format:
-        if "Mono" in text_format:
-            clean_caption = f"<code>{clean_caption}</code>"
-        if "Italic" in text_format:
-            clean_caption = f"<i>{clean_caption}</i>"
-        if "Bold" in text_format:
-            clean_caption = f"<b>{clean_caption}</b>"
+        if "<a " not in clean_caption:
+            if "Mono" in text_format:
+                clean_caption = f"<code>{clean_caption}</code>"
+            if "Italic" in text_format:
+                clean_caption = f"<i>{clean_caption}</i>"
+            if "Bold" in text_format:
+                clean_caption = f"<b>{clean_caption}</b>"
 
     if msg_type != "Text":
         clean_caption = append_media_footer(clean_caption, media_file_size)
@@ -7118,7 +7119,7 @@ async def handle_private(client: Client, acc, message: Message, chatid, msgid: i
             # 3. Try Userbot (acc) direct copy_message
             if not copied:
                 try:
-                    target_for_acc = "me" if (is_bot_dm and getattr(acc, "me", None) and acc.me.id == user_id) else dest_chat_id
+                    target_for_acc = bot_id if (is_bot_dm and bot_id) else dest_chat_id
                     await acc.copy_message(chat_id=target_for_acc, from_chat_id=chatid, message_id=msgid, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=None)
                     copied = True
                 except FloodWait as e:
@@ -7136,26 +7137,27 @@ async def handle_private(client: Client, acc, message: Message, chatid, msgid: i
                     except Exception:
                         pass
 
-            # 4. Bridge Fast-Copy (acc -> Bot DM -> Destination)
-            # If Bot is not in private source channel, but is an admin in destination (or destination is Bot DM):
-            # Userbot acc copies message to Bot DM, then Bot copies from Bot DM to destination!
+            # 4. Bridge Fast-Copy (acc -> Bot DM -> Destination Channel)
+            # If Bot is not in private source channel, but is an admin in destination channel:
+            # Userbot acc copies message to Bot DM (chat_id=bot_id), then Bot copies from user DM (from_chat_id=user_id) to destination!
             # Finishes in 0.2s with zero download and zero bandwidth!
-            if not copied and bot_id:
+            if not copied and bot_id and not is_bot_dm:
                 bridge_msg = None
                 try:
                     bridge_msg = await acc.copy_message(chat_id=bot_id, from_chat_id=chatid, message_id=msgid)
                     if bridge_msg:
                         try:
-                            await client.copy_message(chat_id=dest_chat_id, from_chat_id=bot_id, message_id=bridge_msg.id, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=msg.reply_markup)
+                            # Note: from the Bot's perspective, the chat where bridge_msg lives is user_id!
+                            await client.copy_message(chat_id=dest_chat_id, from_chat_id=user_id, message_id=bridge_msg.id, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=msg.reply_markup)
                             copied = True
                         except FloodWait as fw_b:
                             await asyncio.sleep(fw_b.value + 5)
-                            await client.copy_message(chat_id=dest_chat_id, from_chat_id=bot_id, message_id=bridge_msg.id, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=msg.reply_markup)
+                            await client.copy_message(chat_id=dest_chat_id, from_chat_id=user_id, message_id=bridge_msg.id, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=msg.reply_markup)
                             copied = True
                         except Exception:
                             try:
                                 fallback_cap = prepare_caption_fallback(clean_caption, media_file_size)
-                                await client.copy_message(chat_id=dest_chat_id, from_chat_id=bot_id, message_id=bridge_msg.id, reply_to_message_id=dest_thread_id, caption=fallback_cap, reply_markup=msg.reply_markup)
+                                await client.copy_message(chat_id=dest_chat_id, from_chat_id=user_id, message_id=bridge_msg.id, reply_to_message_id=dest_thread_id, caption=fallback_cap, reply_markup=msg.reply_markup)
                                 copied = True
                             except Exception:
                                 pass
