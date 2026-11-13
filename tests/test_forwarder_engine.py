@@ -423,6 +423,17 @@ class TestLuciferCloudEngineCaption:
         blocked, reason, matched = is_message_blocked(msg)
         assert blocked is False
 
+    def test_extensionless_filename_gets_hyperlink(self):
+        name = "The.Apartment.Job.S01E12.Episode.12.1080p.NF.WEB-DL.AAC2.0.AV1-YiFaN"
+        out = append_media_footer(smart_caption(name, link_fallback=True), 409 * 1024 * 1024)
+        assert f'<a href="https://t.me/luciferdatabase">{name}</a>' in out
+        assert out.count("<a href") == 2
+
+    def test_extensionless_text_is_not_hyperlinked(self):
+        name = "The.Apartment.Job.S01E12.Episode.12.1080p.NF.WEB-DL.AAC2.0.AV1-YiFaN"
+        out = smart_caption(name, link_fallback=False)
+        assert "<a href" not in out
+
 
 class TestAuditedEdgeCases:
     """

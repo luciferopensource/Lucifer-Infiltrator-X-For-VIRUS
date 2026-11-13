@@ -2249,7 +2249,25 @@ def process_lucifer_cloud_engine_caption(text_html: str) -> str:
     return result
 
 # 🚀 SMART CAPTION LOGIC
-def smart_caption(text_html, file_size_bytes=0):
+def _link_first_meaningful_line(lines):
+    """Fallback: hyperlink the first meaningful line when no media extension is present."""
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        plain = re.sub(r'<[^>]+>', '', stripped).strip()
+        if len(plain) < 4:
+            continue
+        if re.search(r'(?i)https?://|(?:^|\s)t\.me/|^@[A-Za-z0-9_]+$', plain):
+            continue
+        if PROMO_LINE_REGEX.match(normalize_fancy_unicode(plain)):
+            continue
+        lines[idx] = f'<a href="https://t.me/luciferdatabase">{stripped}</a>'
+        break
+    return lines
+
+
+def smart_caption(text_html, file_size_bytes=0, link_fallback=False):
     if not text_html: return ""
     
     # 0. Specialized Lucifer Cloud Engine format handling
@@ -2290,6 +2308,8 @@ def smart_caption(text_html, file_size_bytes=0):
             transformed = True
         else:
             lines = [clean_promotional_names(l.replace('_', ' ')) for l in lines]
+            if link_fallback:
+                lines = _link_first_meaningful_line(lines)
     else:
         for j in range(len(lines)):
             if j != media_idx:
@@ -6969,7 +6989,7 @@ async def handle_private(client: Client, acc, message: Message, chatid, msgid: i
         0
     )
 
-    clean_caption = smart_caption(original_caption)
+    clean_caption = smart_caption(original_caption, link_fallback=(msg_type != "Text"))
     if not clean_caption.strip() and msg_type in ["Video", "Document", "Audio"]:
         fallback_fn = (
             getattr(getattr(msg, "document", None), "file_name", None) or
@@ -6978,7 +6998,7 @@ async def handle_private(client: Client, acc, message: Message, chatid, msgid: i
             ""
         )
         if fallback_fn:
-            clean_caption = smart_caption(fallback_fn)
+            clean_caption = smart_caption(fallback_fn, link_fallback=True)
 
     if text_format:
         if "<a " not in clean_caption:
@@ -7953,7 +7973,7 @@ async def process_media_album(client, chat_id, media_group_id, watcher, targets)
             original_caption = m.caption.html
             break
 
-    clean_caption = smart_caption(original_caption)
+    clean_caption = smart_caption(original_caption, link_fallback=True)
     if text_format:
         if "Mono" in text_format: clean_caption = f"<code>{clean_caption}</code>"
         if "Italic" in text_format: clean_caption = f"<i>{clean_caption}</i>"
@@ -8244,7 +8264,7 @@ async def process_watcher_message(client, message):
                 0
             )
 
-            clean_caption = smart_caption(original_caption)
+            clean_caption = smart_caption(original_caption, link_fallback=(msg_type != "Text"))
             if not clean_caption.strip() and msg_type in ["Video", "Document", "Audio"]:
                 fallback_fn = (
                     getattr(getattr(message, "document", None), "file_name", None) or
@@ -8253,7 +8273,7 @@ async def process_watcher_message(client, message):
                     ""
                 )
                 if fallback_fn:
-                    clean_caption = smart_caption(fallback_fn)
+                    clean_caption = smart_caption(fallback_fn, link_fallback=True)
 
             if text_format:
                 if "Mono" in text_format: clean_caption = f"<code>{clean_caption}</code>"
