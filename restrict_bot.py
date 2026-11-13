@@ -7073,6 +7073,20 @@ async def process_links_logic(client: Client, message: Message, text: str, targe
             try: await client.send_message(message.chat.id, final_text, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
             except Exception: pass
 
+async def _finalize_copy(result, kwargs):
+    """Restore a caption that Telegram silently dropped from a copied document."""
+    caption = kwargs.get("caption")
+    if result and caption and not getattr(result, "caption", None):
+        try:
+            await result.edit_caption(caption=caption, parse_mode=kwargs.get("parse_mode", enums.ParseMode.HTML))
+        except Exception:
+            try:
+                await result.edit_caption(caption=re.sub(r'<[^>]+>', '', caption))
+            except Exception as e:
+                print(f"Caption restore failed: {e}")
+    return result
+
+
 async def safe_copy_message(client_obj, **kwargs):
     """Copy a message and return the sent Message, or None on empty/failure.
 
@@ -7081,11 +7095,12 @@ async def safe_copy_message(client_obj, **kwargs):
     """
     try:
         result = await client_obj.copy_message(**kwargs)
-        return result
+        return await _finalize_copy(result, kwargs)
     except FloodWait as e:
         await asyncio.sleep(e.value + 5)
         try:
-            return await client_obj.copy_message(**kwargs)
+            result = await client_obj.copy_message(**kwargs)
+            return await _finalize_copy(result, kwargs)
         except Exception as e2:
             print(f"Copy retry failed: {e2}")
             return None
@@ -7108,6 +7123,8 @@ async def bridge_fast_copy(client, acc, source_chat_id, message_id, dest_chat_id
     bot_target = f"@{bot_user.username}" if getattr(bot_user, "username", None) else bot_id
     bridge_msg = None
     success = False
+    # Telegram counts visible characters; keep a safe caption for edits/forward fallbacks.
+    cap_for_edit = caption if caption and len(re.sub(r'<[^>]+>', '', caption)) <= 1024 else fallback_caption
     try:
         # Blank caption: the bridge must never look like a new source link to the save handler.
         bridge_msg = await acc.copy_message(chat_id=bot_target, from_chat_id=source_chat_id, message_id=message_id, caption=" ")
@@ -7127,8 +7144,8 @@ async def bridge_fast_copy(client, acc, source_chat_id, message_id, dest_chat_id
 
         await asyncio.sleep(0.2)
         for attempt in range(2):
-            result = await client.copy_message(
-                chat_id=dest_chat_id, from_chat_id=sender_id, message_id=bridge_msg.id,
+            result = await safe_copy_message(
+                client, chat_id=dest_chat_id, from_chat_id=sender_id, message_id=bridge_msg.id,
                 reply_to_message_id=dest_thread_id, caption=caption,
                 parse_mode=enums.ParseMode.HTML, reply_markup=reply_markup
             )
@@ -7138,29 +7155,45 @@ async def bridge_fast_copy(client, acc, source_chat_id, message_id, dest_chat_id
             print(f"[BRIDGE] copy attempt {attempt + 1} returned None")
             await asyncio.sleep(0.4)
 
-        try:
-            result = await client.copy_message(
-                chat_id=dest_chat_id, from_chat_id=sender_id, message_id=bridge_msg.id,
-                reply_to_message_id=dest_thread_id, caption=fallback_caption,
-                reply_markup=reply_markup
-            )
-            if result:
-                success = True
-                return True
-            print("[BRIDGE] fallback copy returned None")
-        except Exception as e:
-            print(f"[BRIDGE] fallback copy failed: {e}")
+        result = await safe_copy_message(
+            client, chat_id=dest_chat_id, from_chat_id=sender_id, message_id=bridge_msg.id,
+            reply_to_message_id=dest_thread_id, caption=fallback_caption,
+            reply_markup=reply_markup
+        )
+        if result:
+            success = True
+            return True
+        print("[BRIDGE] fallback copy returned None")
 
         try:
             forwarded = await client.forward_messages(
                 chat_id=dest_chat_id, from_chat_id=sender_id, message_ids=bridge_msg.id
             )
             if forwarded:
+                fwd_msg = forwarded[0] if isinstance(forwarded, list) else forwarded
+                try:
+                    await fwd_msg.edit_caption(caption=cap_for_edit, parse_mode=enums.ParseMode.HTML)
+                except Exception:
+                    try:
+                        await fwd_msg.edit_caption(caption=re.sub(r'<[^>]+>', '', cap_for_edit))
+                    except Exception as e:
+                        print(f"[BRIDGE] forward caption restore failed: {e}")
                 success = True
                 return True
             print("[BRIDGE] forward returned None")
         except Exception as e:
             print(f"[BRIDGE] forward failed: {e}")
+
+        # Final copy failed on a Bot-PM destination: the bridge is retained, so caption it.
+        if is_bot_dm and bridge_msg:
+            try:
+                await bridge_msg.edit_caption(caption=cap_for_edit, parse_mode=enums.ParseMode.HTML)
+                print("[BRIDGE] final copy failed; caption applied to retained bridge")
+            except Exception:
+                try:
+                    await bridge_msg.edit_caption(caption=re.sub(r'<[^>]+>', '', cap_for_edit))
+                except Exception as e:
+                    print(f"[BRIDGE] bridge caption edit failed: {e}")
 
         return False
     except Exception as e:
