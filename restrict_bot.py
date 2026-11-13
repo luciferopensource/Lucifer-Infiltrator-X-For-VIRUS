@@ -7303,10 +7303,12 @@ async def handle_private(client: Client, acc, message: Message, chatid, msgid: i
             # If Bot is not in private source channel, but is an admin in destination channel:
             # Userbot acc copies message to Bot DM (chat_id=bot_id), then Bot copies from user DM (from_chat_id=user_id) to destination!
             # Finishes in 0.2s with zero download and zero bandwidth!
-            if not copied and bot_id and not is_bot_dm:
+            if not copied and bot_id:
                 bridge_msg = None
+                bot_target = f"@{bot_user.username}" if getattr(bot_user, "username", None) else bot_id
                 try:
-                    bridge_msg = await acc.copy_message(chat_id=bot_id, from_chat_id=chatid, message_id=msgid)
+                    # Blank caption: the bridge must never look like a new source link to the bot's save handler
+                    bridge_msg = await acc.copy_message(chat_id=bot_target, from_chat_id=chatid, message_id=msgid, caption=" ")
                     if bridge_msg:
                         # The bridge lives in the bot's DM with the userbot account, so the
                         # bot must read it from that account's id (not the bot-owner user id).
