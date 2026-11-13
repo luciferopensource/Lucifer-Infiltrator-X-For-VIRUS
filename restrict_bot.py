@@ -1037,26 +1037,46 @@ app = Client(
 # --- NATIVE ASK IMPLEMENTATION ---
 # ==============================================================================
 ASK_FUTURES = {}
+ASK_FLOW_SEQ = 0
 
-async def custom_ask(self, chat_id: int, text: str, filters=None, timeout: int = 300, **kwargs):
-    msg = await self.send_message(chat_id, text, **kwargs)
+
+def _make_cancel_message(client, chat_id):
+    class MockMessage:
+        text = "/cancel"
+        async def reply(self, reply_text, *args, **kw):
+            return await client.send_message(chat_id, reply_text, *args, **kw)
+    mock_msg = MockMessage()
+    mock_msg._client = client
+    return mock_msg
+
+
+async def custom_ask(self, chat_id: int, text: str, filters=None, timeout: int = 300, flow_id: str = None, **kwargs):
+    global ASK_FLOW_SEQ
+    await self.send_message(chat_id, text, **kwargs)
     loop = asyncio.get_running_loop()
     future = loop.create_future()
-    ASK_FUTURES[chat_id] = (future, filters)
-    
+    if flow_id is None:
+        ASK_FLOW_SEQ += 1
+        flow_id = f"auto{ASK_FLOW_SEQ}"
+    key = (int(chat_id), str(flow_id))
+
+    # A new prompt supersedes older pending prompts in the same chat; never leave them hanging
+    for old_key in [k for k in list(ASK_FUTURES.keys()) if k[0] == key[0] and k != key]:
+        old_future, _old_filters, _created = ASK_FUTURES.pop(old_key, (None, None, None))
+        if old_future and not old_future.done():
+            old_future.set_result(_make_cancel_message(self, chat_id))
+
+    ASK_FUTURES[key] = (future, filters, time.time())
+
     try:
         return await asyncio.wait_for(future, timeout)
     except asyncio.TimeoutError:
-        ASK_FUTURES.pop(chat_id, None)
-        
-        class MockMessage:
-            text = "/cancel"
-            async def reply(self, reply_text, *args, **kw):
-                return await self._client.send_message(chat_id, reply_text, *args, **kw)
-                
-        mock_msg = MockMessage()
-        mock_msg._client = self
-        return mock_msg
+        ASK_FUTURES.pop(key, None)
+        try:
+            await self.send_message(chat_id, "⏱ <b>Timeout:</b> no response received — the prompt was cancelled.")
+        except Exception:
+            pass
+        return _make_cancel_message(self, chat_id)
 
 Client.ask = custom_ask
 
@@ -1381,20 +1401,22 @@ async def callback_auth_gatekeeper(client: Client, query: CallbackQuery):
 @app.on_message(filters.private, group=-1)
 async def ask_listener(client, message):
     chat_id = message.chat.id
-    if chat_id in ASK_FUTURES:
-        future, filter_cond = ASK_FUTURES[chat_id]
-        
-        if filter_cond:
-            is_match = filter_cond(client, message)
-            if asyncio.iscoroutine(is_match):
-                is_match = await is_match
-            if not is_match:
-                return 
-                
-        ASK_FUTURES.pop(chat_id, None)
-        if not future.done():
-            future.set_result(message)
-        message.stop_propagation()
+    pending = [(k, v) for k, v in ASK_FUTURES.items() if k[0] == chat_id]
+    if not pending:
+        return
+    key, (future, filter_cond, _created) = max(pending, key=lambda kv: kv[1][2])
+
+    if filter_cond:
+        is_match = filter_cond(client, message)
+        if asyncio.iscoroutine(is_match):
+            is_match = await is_match
+        if not is_match:
+            return
+
+    ASK_FUTURES.pop(key, None)
+    if not future.done():
+        future.set_result(message)
+    message.stop_propagation()
 
 # ==============================================================================
 
@@ -6696,19 +6718,22 @@ async def process_links_logic(client: Client, message: Message, text: str, targe
                 except Exception:
                     pass
 
-            primary_dest = targets[0]['dest_id'] if targets else "unknown_dest"
-            saved_msg_id = await db.get_sync_progress(user_id, chatid_check, primary_dest)
+            # PER-TARGET RESUME: one destination must never hide another's gap
+            target_cursors = {}
+            for _t in targets:
+                target_cursors[str(_t['dest_id'])] = await db.get_sync_progress(user_id, chatid_check, _t['dest_id'])
+            saved_msg_id = min(target_cursors.values()) if target_cursors else 0
 
             skip_duplicates_amount = 0
-            
-            if saved_msg_id >= toID:
-                skip_msg = (f"⏭ **DUPLICATE SKIPPED!**\n🤖 **Bot/User:** {user_mention}\n📂 **Source ID:** `{chatid_check}`\n🎯 **Destination:** `{dest_title}`\n✅ **Status:** Files up to ID `{toID}` are already synced.")
+
+            if target_cursors and saved_msg_id >= toID:
+                skip_msg = (f"⏭ **DUPLICATE SKIPPED!**\n🤖 **Bot/User:** {user_mention}\n📂 **Source ID:** `{chatid_check}`\n🎯 **Destination:** `{dest_title}`\n✅ **Status:** Files up to ID `{toID}` are already synced to every destination.")
                 try: await client.send_message(message.chat.id, skip_msg, reply_to_message_id=message.id)
                 except Exception: pass
                 if task_uuid in ACTIVE_PROCESSES.get(user_id, {}): del ACTIVE_PROCESSES[user_id][task_uuid]
                 if is_temp_client: await acc.stop()
                 return
-                
+
             elif saved_msg_id >= fromID and saved_msg_id < toID:
                 skip_duplicates_amount = (saved_msg_id - fromID) + 1
                 fromID = saved_msg_id + 1
@@ -6770,19 +6795,24 @@ async def process_links_logic(client: Client, message: Message, text: str, targe
 
                 is_success = False
                 status_reason = "failed"
+                active_targets = targets
                 try:
                     chat_id = int("-100" + parts[0]) if "https://t.me/c/" in text else parts[0]
                     
-                    is_success, status_reason = await handle_private(
-                        client, acc, message, chat_id, msgid, index, total_count, 
-                        status_message, targets, delay, 
-                        user_id, task_uuid, 
-                        is_restricted=is_restricted, 
-                        header_text=inner_header,
-                        filter_thread_id=filter_thread_id,
-                        allowed_types=allowed_types,
-                        text_format=text_format
-                    )
+                    active_targets = [t for t in targets if target_cursors.get(str(t['dest_id']), 0) < msgid]
+                    if not active_targets:
+                        is_success, status_reason = False, "duplicate"
+                    else:
+                        is_success, status_reason = await handle_private(
+                            client, acc, message, chat_id, msgid, index, total_count,
+                            status_message, active_targets, delay,
+                            user_id, task_uuid,
+                            is_restricted=is_restricted,
+                            header_text=inner_header,
+                            filter_thread_id=filter_thread_id,
+                            allowed_types=allowed_types,
+                            text_format=text_format
+                        )
                 
                 except FloodWait as e:
                     wait_time = e.value + 5
@@ -6803,11 +6833,12 @@ async def process_links_logic(client: Client, message: Message, text: str, targe
                 elif status_reason == "filtered": task_info["filtered"] += 1
                 elif status_reason == "dl_disabled": task_info["skipped"] += 1
                 elif status_reason == "skipped": task_info["skipped"] += 1
+                elif status_reason == "duplicate": task_info["duplicate"] += 1
                 elif status_reason == "cancelled": was_cancelled = True; break
                 else: task_info["failed"] += 1
 
                 if is_success: success_count += 1
-                else: failed_count += 1
+                elif status_reason != "duplicate": failed_count += 1
 
                 if index < total_count:
                     if is_success:
@@ -6820,8 +6851,10 @@ async def process_links_logic(client: Client, message: Message, text: str, targe
                 if task_info["fetched"] % 100 == 0:
                     gc.collect()
 
-                if not was_cancelled and is_success: 
-                    await db.save_sync_progress(user_id, chatid_check, primary_dest, msgid)
+                if not was_cancelled and is_success:
+                    for _t in active_targets:
+                        target_cursors[str(_t['dest_id'])] = msgid
+                        await db.save_sync_progress(user_id, chatid_check, _t['dest_id'], msgid)
 
                 needs_refresh = task_info.get("needs_refresh", False)
                 force_update = task_info.get("force_update_ui", False)

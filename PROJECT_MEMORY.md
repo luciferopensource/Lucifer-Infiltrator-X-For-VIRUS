@@ -253,6 +253,8 @@ Comprehensive code audit conducted by Senior Software Engineer and Code Auditor.
 - **Bridge Sender Peer Fix:** the bridge message is read from the userbot account id (`acc.me.id`), not the bot-owner user id, so multi-account logins work correctly.
 - **Extension-less media names:** normal media without a recognised extension (e.g. `...AV1-YiFaN`) now receives the filename hyperlink through `link_fallback`, matching the branded format.
 - **Text formatting:** Bold/Italic may wrap the filename hyperlink; Mono is emitted as plain `<code>` without a link; Cloud Engine templates are never reformatted.
+- **Per-target resume:** progress is stored per destination; the batch resumes from the least-advanced target and only destinations still behind receive each message.
+- **Multi-flow ask:** pending prompts are keyed by `(chat_id, flow_id)`; a new prompt supersedes older ones without leaving them hanging, and timeouts notify the user.
 - **Verification:** All 89 test cases passing in `tests/test_forwarder_engine.py` (100% pass rate).
 
 
