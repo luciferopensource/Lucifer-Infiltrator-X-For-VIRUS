@@ -109,6 +109,11 @@ DB_URI = os.environ.get("DB_URI", "")
 DB_NAME = os.environ.get("DB_NAME", "")
 STRING_SESSION = os.environ.get("STRING_SESSION", None)
 SESSION_ENC_KEY = os.environ.get("SESSION_ENC_KEY", "").strip()
+SESSION_ENC_KEY_FALLBACK = False
+if not SESSION_ENC_KEY and BOT_TOKEN:
+    # Encrypt at rest even when no dedicated key is supplied; rotating BOT_TOKEN invalidates old sessions.
+    SESSION_ENC_KEY = BOT_TOKEN
+    SESSION_ENC_KEY_FALLBACK = True
 
 # Error Log Channel (Optional)
 LOG_CHANNEL = os.environ.get("LOG_CHANNEL", "") 
@@ -8744,10 +8749,16 @@ async def main():
         except Exception:
             pass
 
-    if not SESSION_ENC_KEY:
-        print("⚠️ [SECURITY] SESSION_ENC_KEY not set — MTProto sessions are stored unencrypted.")
+    if SESSION_ENC_KEY_FALLBACK:
+        print("⚠️ [SECURITY] SESSION_ENC_KEY not set — deriving the encryption key from BOT_TOKEN. Set SESSION_ENC_KEY explicitly; rotating BOT_TOKEN will make old sessions unreadable.")
         try:
-            await send_log("⚠️ **Security warning:** SESSION_ENC_KEY not set; MTProto sessions are stored unencrypted.")
+            await send_log("⚠️ **Security warning:** SESSION_ENC_KEY not set; using a BOT_TOKEN-derived key. Set SESSION_ENC_KEY explicitly.")
+        except Exception:
+            pass
+    elif not SESSION_ENC_KEY:
+        print("⚠️ [SECURITY] No SESSION_ENC_KEY or BOT_TOKEN — MTProto sessions are stored unencrypted.")
+        try:
+            await send_log("⚠️ **Security warning:** no SESSION_ENC_KEY/BOT_TOKEN; MTProto sessions are stored unencrypted.")
         except Exception:
             pass
 

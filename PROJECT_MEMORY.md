@@ -255,7 +255,7 @@ Comprehensive code audit conducted by Senior Software Engineer and Code Auditor.
 - **Text formatting:** Bold/Italic may wrap the filename hyperlink; Mono is emitted as plain `<code>` without a link; Cloud Engine templates are never reformatted.
 - **Per-target resume:** progress is stored per destination; the batch resumes from the least-advanced target and only destinations still behind receive each message.
 - **Multi-flow ask:** pending prompts are keyed by `(chat_id, flow_id)`; a new prompt supersedes older ones without leaving them hanging, and timeouts notify the user.
-- **Session encryption:** `SESSION_ENC_KEY` derives a Fernet key; `session`/`api_hash` are stored as `enc:` tokens, legacy plaintext still reads, and changing the key makes old sessions unreadable (re-login required).
+- **Session encryption:** `SESSION_ENC_KEY` derives a Fernet key; `session`/`api_hash` are stored as `enc:` tokens, legacy plaintext still reads. If `SESSION_ENC_KEY` is unset, the key is derived from `BOT_TOKEN`, so rotating the token invalidates old sessions (re-login required).
 - **Log redaction:** `/log` sends a redacted copy (`bot.log.redacted`) with DB URIs, bot tokens, credential assignments and long session strings removed.
 - **Verification:** All 91 test cases passing in `tests/test_forwarder_engine.py` (100% pass rate).
 
