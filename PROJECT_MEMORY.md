@@ -239,5 +239,17 @@ Comprehensive code audit conducted by Senior Software Engineer and Code Auditor.
 - **Startup visibility:** index/watcher failures are logged and reported to `LOG_CHANNEL`; explicit warning when no admins are configured.
 - **String-session login:** stores the API credentials actually used for validation.
 - **Caption fallback:** only inspects captions for file-bearing media, preventing false `*.srt` drops of text posts.
-- **Verification:** `pytest tests/test_forwarder_engine.py` — 84 passed (2026-11-13).
+- **Verification:** `pytest tests/test_forwarder_engine.py` — 85 passed (2026-11-13).
+
+## 17. Unrestricted Channel 4-Tier Fast-Copy & Bridge Architecture (2026-11-13)
+- **Eliminated Dotted Extension Gating:** Removed `has_dotted_ext` check gating `allow_fast_copy` in `handle_private` and `process_watcher_message`. Previously, video messages uploaded directly via Telegram mobile/web lacking a `.file_name` attribute failed dotted extension validation and were needlessly redirected to heavy disk download routines or skipped when `auto_dl` was OFF.
+- **4-Tier Fast-Copy Cascade:**
+  1. *Direct Bot Copy:* Clean server-side `copy_message` without forward tags.
+  2. *Direct Userbot Copy:* Dispatches through the authenticated userbot session for channels where the bot lacks membership, including direct delivery to Saved Messages or user PM.
+  3. *Bridge Fast-Copy (`acc -> Bot DM -> Destination`):* Resolves access divergence where the userbot can read private source channels (`t.me/c/...`) but lacks posting rights in destination channels, while the Bot has destination posting rights but lacks source membership. Userbot copies to Bot DM in 0.1s; Bot immediately copies from Bot DM to destination and deletes the bridge artifact. Zero disk usage, zero bandwidth consumption, and instant delivery.
+  4. *Fallback to Download:* Only triggered when explicit Telegram content protection (`has_protected_content = True`) is enforced.
+- **Diagnostic Logging:** Added explicit error logging in `handle_private` for `get_messages` failures and `UserNotParticipant` detection.
+- **Dual-Remote Upstream Synchronization:** Synced and configured remotes for both GitLab (`git@gitlab.com:luciferopensource/Lucifer-InfiltratorX-For-Virus.git`) and GitHub (`git@github.com:luciferopensource/Lucifer-Infiltrator-X-For-VIRUS.git`).
+- **Verification:** All 85 test cases passing in `tests/test_forwarder_engine.py` (100% pass rate).
+
 

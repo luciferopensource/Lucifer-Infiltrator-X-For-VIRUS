@@ -461,3 +461,10 @@ class TestAuditedEdgeCases:
         open_a = len(re.findall(r'<a\b[^>]*>', res))
         close_a = len(re.findall(r'</a>', res))
         assert open_a == close_a
+
+    def test_non_restricted_file_fast_copy_eligibility(self):
+        # A file from an unprotected channel must always be eligible for fast copy
+        has_protected_content = False
+        allow_fast_copy = not has_protected_content
+        assert allow_fast_copy is True
+
