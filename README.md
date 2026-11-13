@@ -350,6 +350,7 @@ Every configuration parameter is derived directly from the application source co
 | `DB_URI` | **Yes** | `""` | String | MongoDB connection URI with read/write privileges. | `mongodb+srv://<username>:<password>@cluster0...` |
 | `DB_NAME` | **Yes** | `""` | String | MongoDB database name. Must be unique per bot instance. | `Lucifer_Cluster_01` |
 | `STRING_SESSION`| No | `None` | String | Pyrogram v2 string session for default userbot operations. | `BQAF...very_long_session_string` |
+| `SESSION_ENC_KEY`| No | `None` | String | Passphrase used to encrypt stored MTProto session strings and API hashes. Use a long random value; changing it makes existing sessions unreadable. | `a-very-long-random-passphrase` |
 | `LOG_CHANNEL` | No | `""` | String/Int | Channel ID (or `ID/Topic_ID`) for audit logs & crash alerts. | `-1001234567890` or `-1001234567890/42` |
 | `STATUS_UPDATE_INTERVAL` | No | `15` | Integer | Minimum interval (in seconds) between progress bar edits. | `15` |
 | `LOGIN_SYSTEM` | No | `True` | Boolean | Enables or disables the interactive phone `/login` wizard. | `True` |
@@ -1148,12 +1149,14 @@ Never commit, share, or upload any of the following credentials:
 • API_HASH
 • DB_URI (containing user passwords)
 • STRING_SESSION
+• SESSION_ENC_KEY
 • Telegram Login OTPs or 2FA Passwords
 ```
 
 * **Git Secret Prevention:** The repository `.gitignore` is preconfigured to ignore `.env`, `bot.log`, and `*.session` files. Always verify staged changes with `git status` prior to committing.
 * **Database Access Control:** Restrict MongoDB users to specific database boundaries. Do not use Atlas administrative root users for runtime bot connections.
 * **Session Protection:** Pyrogram session strings grant full access to your Telegram account. Never paste session strings into public groups or logs.
+* **Encryption at Rest:** Set `SESSION_ENC_KEY` to encrypt session strings and API hashes in MongoDB; `/log` now sends a redacted copy with tokens and long session strings removed.
 
 ---
 

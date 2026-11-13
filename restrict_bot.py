@@ -22,6 +22,8 @@ import subprocess
 import gc
 import datetime
 import uuid
+import base64
+import hashlib
 import urllib.parse
 import unicodedata
 from pathlib import Path
@@ -106,6 +108,7 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 DB_URI = os.environ.get("DB_URI", "")
 DB_NAME = os.environ.get("DB_NAME", "")
 STRING_SESSION = os.environ.get("STRING_SESSION", None)
+SESSION_ENC_KEY = os.environ.get("SESSION_ENC_KEY", "").strip()
 
 # Error Log Channel (Optional)
 LOG_CHANNEL = os.environ.get("LOG_CHANNEL", "") 
@@ -237,6 +240,69 @@ HELP_TXT = """<b>📚 𝕃𝕌ℂ𝕀𝔽𝔼ℝ 𝕄𝕆ℝℕ𝕀ℕ𝔾𝕊�
 # ==============================================================================
 # --- DATABASE ---
 # ==============================================================================
+
+# --- SESSION SECRET ENCRYPTION -------------------------------------------------
+def _session_fernet():
+    """Derive a Fernet key from SESSION_ENC_KEY; returns None when unset/unavailable."""
+    if not SESSION_ENC_KEY:
+        return None
+    try:
+        from cryptography.fernet import Fernet
+    except ImportError:
+        print("⚠️ [SECURITY] cryptography is not installed; session encryption is disabled.")
+        return None
+    try:
+        key = base64.urlsafe_b64encode(hashlib.sha256(SESSION_ENC_KEY.encode("utf-8")).digest())
+        return Fernet(key)
+    except Exception as e:
+        print(f"⚠️ [SECURITY] Invalid SESSION_ENC_KEY: {e}")
+        return None
+
+
+def encrypt_secret(value):
+    if not value or not isinstance(value, str) or value.startswith("enc:"):
+        return value
+    f = _session_fernet()
+    if not f:
+        return value
+    return "enc:" + f.encrypt(value.encode("utf-8")).decode("ascii")
+
+
+def decrypt_secret(value):
+    if not value or not isinstance(value, str) or not value.startswith("enc:"):
+        return value
+    f = _session_fernet()
+    if not f:
+        print("⚠️ [SECURITY] SESSION_ENC_KEY missing/invalid; cannot decrypt a stored session.")
+        return None
+    try:
+        return f.decrypt(value[4:].encode("ascii")).decode("utf-8")
+    except Exception:
+        print("⚠️ [SECURITY] Stored session could not be decrypted (wrong SESSION_ENC_KEY?).")
+        return None
+
+
+def encrypt_account(acc):
+    if not isinstance(acc, dict):
+        return acc
+    stored = dict(acc)
+    if "session" in stored:
+        stored["session"] = encrypt_secret(stored["session"])
+    if "api_hash" in stored:
+        stored["api_hash"] = encrypt_secret(stored["api_hash"])
+    return stored
+
+
+def decrypt_account(acc):
+    if not isinstance(acc, dict):
+        return acc
+    plain = dict(acc)
+    if "session" in plain:
+        plain["session"] = decrypt_secret(plain["session"])
+    if "api_hash" in plain:
+        plain["api_hash"] = decrypt_secret(plain["api_hash"])
+    return plain
+
 
 class Database:
     def __init__(self, uri, database_name):
@@ -748,12 +814,12 @@ class Database:
         await self.col.delete_many({'id': int(user_id)})
 
     async def set_session(self, id, session):
-        await self.col.update_one({'id': int(id)}, {'$set': {'session': session}})
+        await self.col.update_one({'id': int(id)}, {'$set': {'session': encrypt_secret(session)}})
 
     async def get_session(self, id):
         user = await self.col.find_one({'id': int(id)})
         if user:
-            return user.get('session')
+            return decrypt_secret(user.get('session'))
         return None
 
     async def set_api_id(self, id, api_id):
@@ -766,12 +832,12 @@ class Database:
         return None
 
     async def set_api_hash(self, id, api_hash):
-        await self.col.update_one({'id': int(id)}, {'$set': {'api_hash': api_hash}})
+        await self.col.update_one({'id': int(id)}, {'$set': {'api_hash': encrypt_secret(api_hash)}})
 
     async def get_api_hash(self, id):
         user = await self.col.find_one({'id': int(id)})
         if user:
-            return user.get('api_hash')
+            return decrypt_secret(user.get('api_hash'))
         return None
 
 
@@ -787,18 +853,18 @@ class Database:
                 'first_name': user.get('name') or "Primary Account",
                 'username': "",
                 'user_id': int(id),
-                'session': user.get('session'),
+                'session': decrypt_secret(user.get('session')),
                 'api_id': user.get('api_id'),
-                'api_hash': user.get('api_hash'),
+                'api_hash': decrypt_secret(user.get('api_hash')),
                 'added_at': datetime.datetime.now().isoformat(),
                 'is_active': True
             }
             accounts = [legacy_acc]
             await self.col.update_one(
                 {'id': int(id)},
-                {'$set': {'accounts': accounts, 'active_account_id': legacy_acc['account_id']}}
+                {'$set': {'accounts': [encrypt_account(legacy_acc)], 'active_account_id': legacy_acc['account_id']}}
             )
-        return accounts
+        return [decrypt_account(a) for a in accounts if isinstance(a, dict)]
 
     async def add_user_account(self, id, account_data, set_as_active=True):
         user = await self.col.find_one({'id': int(id)})
@@ -806,7 +872,7 @@ class Database:
             await self.add_user(id, account_data.get('first_name', 'User'))
             user = await self.col.find_one({'id': int(id)}) or {}
             
-        accounts = user.get('accounts') or []
+        accounts = [encrypt_account(a) for a in (user.get('accounts') or []) if isinstance(a, dict)]
         if not accounts and user.get('session'):
             accounts.append({
                 'account_id': f"acc_{id}_main",
@@ -814,14 +880,15 @@ class Database:
                 'first_name': user.get('name') or "Primary Account",
                 'username': "",
                 'user_id': int(id),
-                'session': user.get('session'),
+                'session': encrypt_secret(user.get('session')),
                 'api_id': user.get('api_id'),
-                'api_hash': user.get('api_hash'),
+                'api_hash': encrypt_secret(user.get('api_hash')),
                 'added_at': datetime.datetime.now().isoformat(),
                 'is_active': False
             })
 
         acc_id = str(account_data.get('account_id') or account_data.get('user_id') or uuid.uuid4().hex[:8])
+        account_data = encrypt_account(account_data)
         account_data['account_id'] = acc_id
         account_data['added_at'] = datetime.datetime.now().isoformat()
         
@@ -865,11 +932,11 @@ class Database:
             return None
             
         update_fields = {
-            'accounts': accounts,
+            'accounts': [encrypt_account(a) for a in accounts],
             'active_account_id': target_acc['account_id'],
-            'session': target_acc['session'],
+            'session': encrypt_secret(target_acc['session']),
             'api_id': target_acc.get('api_id'),
-            'api_hash': target_acc.get('api_hash')
+            'api_hash': encrypt_secret(target_acc.get('api_hash'))
         }
         await self.col.update_one({'id': int(id)}, {'$set': update_fields})
         return target_acc
@@ -883,11 +950,11 @@ class Database:
             for a in remaining:
                 a['is_active'] = (str(a.get('account_id')) == str(new_active.get('account_id')))
             update_fields = {
-                'accounts': remaining,
+                'accounts': [encrypt_account(a) for a in remaining],
                 'active_account_id': new_active['account_id'],
-                'session': new_active['session'],
+                'session': encrypt_secret(new_active['session']),
                 'api_id': new_active.get('api_id'),
-                'api_hash': new_active.get('api_hash')
+                'api_hash': encrypt_secret(new_active.get('api_hash'))
             }
         else:
             update_fields = {
@@ -3318,6 +3385,25 @@ async def status_style_handler(client, message):
     )
     await message.reply(f"<pre>{html.escape(status_body)}</pre>", quote=True, parse_mode=enums.ParseMode.HTML)
     
+def build_redacted_log():
+    """Copy bot.log with tokens, session strings and DB URIs removed."""
+    src = Path("bot.log")
+    if not src.exists():
+        return None
+    dst = Path("bot.log.redacted")
+    try:
+        text = src.read_text(encoding="utf-8", errors="replace")
+        text = re.sub(r'mongodb(?:\+srv)?://[^\s\'"<>]+', 'mongodb://[REDACTED]', text)
+        text = re.sub(r'(?i)\b(bot_token|api_hash|session_string|session_enc_key|db_uri)\b\s*[=:]\s*[^\s,;"\']+', r'\1=[REDACTED]', text)
+        text = re.sub(r'\b\d{8,10}:[A-Za-z0-9_-]{30,}\b', '[BOT_TOKEN_REDACTED]', text)
+        text = re.sub(r'\b[A-Za-z0-9_-]{250,}\b', '[LONG_SECRET_REDACTED]', text)
+        dst.write_text(text, encoding="utf-8")
+        return dst
+    except Exception as e:
+        print(f"⚠️ [LOG] Redaction failed: {e}")
+        return None
+
+
 @app.on_message(filters.command(["log"]) & filters.private & ~filters.bot)
 async def send_log_handler(client: Client, message: Message):
     if not message.chat or message.chat.type != enums.ChatType.PRIVATE:
@@ -3325,8 +3411,15 @@ async def send_log_handler(client: Client, message: Message):
     user_id = message.from_user.id if message.from_user else 0
     if not is_admin(user_id):
         return await message.reply("⛔ <b>Access Denied:</b> This command is restricted to administrators.", quote=True)
-    if os.path.exists("bot.log"):
-        await message.reply_document("bot.log", caption="📄 **Bot Logs**\n(Updates automatically)")
+    redacted_log = build_redacted_log()
+    if redacted_log:
+        try:
+            await message.reply_document(str(redacted_log), caption="📄 **Bot Logs (redacted)**\nSecrets and long tokens removed.")
+        finally:
+            try:
+                redacted_log.unlink()
+            except Exception:
+                pass
     else:
         await message.reply("⚠️ Log file not found yet.")
 
@@ -8648,6 +8741,13 @@ async def main():
         print("⚠️ [SECURITY] No ADMINS/AUTH_USERS configured — set OWNER_ID/ADMINS or ALLOW_OPEN_ACCESS=true.")
         try:
             await send_log("⚠️ **Security warning:** no ADMINS/AUTH_USERS configured; access is restricted unless ALLOW_OPEN_ACCESS=true.")
+        except Exception:
+            pass
+
+    if not SESSION_ENC_KEY:
+        print("⚠️ [SECURITY] SESSION_ENC_KEY not set — MTProto sessions are stored unencrypted.")
+        try:
+            await send_log("⚠️ **Security warning:** SESSION_ENC_KEY not set; MTProto sessions are stored unencrypted.")
         except Exception:
             pass
 

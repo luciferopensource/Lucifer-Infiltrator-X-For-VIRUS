@@ -9,3 +9,5 @@ aiohttp
 psutil
 dnspython
 uvloop
+
+cryptography

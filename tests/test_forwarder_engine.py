@@ -491,3 +491,31 @@ class TestAuditedEdgeCases:
         assert out == "<code>Movie.mkv</code>"
         assert "<a href" not in out
 
+# --- Security helpers: session encryption + log redaction --------------------
+import restrict_bot as rb
+
+
+def test_session_secret_roundtrip(monkeypatch):
+    monkeypatch.setattr(rb, "SESSION_ENC_KEY", "unit-test-key")
+    token = rb.encrypt_secret("1BVts-test-session")
+    assert token.startswith("enc:")
+    assert rb.decrypt_secret(token) == "1BVts-test-session"
+    assert rb.encrypt_secret(token) == token
+    assert rb.decrypt_secret("plain-session") == "plain-session"
+
+
+def test_log_redaction(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "bot.log").write_text(
+        """DB_URI=mongodb+srv://user:pass@cluster0.example.net/db
+BOT_TOKEN=123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi
+""" + "session=" + "A" * 300 + "\nnormal line\n",
+        encoding="utf-8",
+    )
+    out = rb.build_redacted_log()
+    assert out is not None
+    text = out.read_text(encoding="utf-8")
+    assert "mongodb+srv://user:pass" not in text
+    assert "123456789:ABC" not in text
+    assert "A" * 300 not in text
+    assert "normal line" in text
