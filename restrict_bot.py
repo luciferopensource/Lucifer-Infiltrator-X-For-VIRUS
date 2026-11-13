@@ -7146,18 +7146,20 @@ async def handle_private(client: Client, acc, message: Message, chatid, msgid: i
                 try:
                     bridge_msg = await acc.copy_message(chat_id=bot_id, from_chat_id=chatid, message_id=msgid)
                     if bridge_msg:
+                        # The bridge lives in the bot's DM with the userbot account, so the
+                        # bot must read it from that account's id (not the bot-owner user id).
+                        bridge_sender_id = getattr(getattr(acc, "me", None), "id", None) or user_id
                         try:
-                            # Note: from the Bot's perspective, the chat where bridge_msg lives is user_id!
-                            await client.copy_message(chat_id=dest_chat_id, from_chat_id=user_id, message_id=bridge_msg.id, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=msg.reply_markup)
+                            await client.copy_message(chat_id=dest_chat_id, from_chat_id=bridge_sender_id, message_id=bridge_msg.id, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=msg.reply_markup)
                             copied = True
                         except FloodWait as fw_b:
                             await asyncio.sleep(fw_b.value + 5)
-                            await client.copy_message(chat_id=dest_chat_id, from_chat_id=user_id, message_id=bridge_msg.id, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=msg.reply_markup)
+                            await client.copy_message(chat_id=dest_chat_id, from_chat_id=bridge_sender_id, message_id=bridge_msg.id, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=msg.reply_markup)
                             copied = True
                         except Exception:
                             try:
                                 fallback_cap = prepare_caption_fallback(clean_caption, media_file_size)
-                                await client.copy_message(chat_id=dest_chat_id, from_chat_id=user_id, message_id=bridge_msg.id, reply_to_message_id=dest_thread_id, caption=fallback_cap, reply_markup=msg.reply_markup)
+                                await client.copy_message(chat_id=dest_chat_id, from_chat_id=bridge_sender_id, message_id=bridge_msg.id, reply_to_message_id=dest_thread_id, caption=fallback_cap, reply_markup=msg.reply_markup)
                                 copied = True
                             except Exception:
                                 pass

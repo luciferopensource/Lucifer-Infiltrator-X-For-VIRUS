@@ -250,6 +250,7 @@ Comprehensive code audit conducted by Senior Software Engineer and Code Auditor.
   4. *Fallback to Download:* Only triggered when explicit Telegram content protection (`has_protected_content = True`) is enforced.
 - **Diagnostic Logging:** Added explicit error logging in `handle_private` for `get_messages` failures and `UserNotParticipant` detection.
 - **Dual-Remote Upstream Synchronization:** Synced and configured remotes for both GitLab (`git@gitlab.com:luciferopensource/Lucifer-InfiltratorX-For-Virus.git`) and GitHub (`git@github.com:luciferopensource/Lucifer-Infiltrator-X-For-VIRUS.git`).
+- **Bridge Sender Peer Fix:** the bridge message is read from the userbot account id (`acc.me.id`), not the bot-owner user id, so multi-account logins work correctly.
 - **Verification:** All 85 test cases passing in `tests/test_forwarder_engine.py` (100% pass rate).
 
 
