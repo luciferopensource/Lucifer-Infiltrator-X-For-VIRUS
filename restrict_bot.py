@@ -45,10 +45,29 @@ import sys
 
 # --- LOGGER SETUP ---
 class LoggerWriter:
+    MAX_LOG_BYTES = 10 * 1024 * 1024
+
     def __init__(self, is_stderr=False):
         self.terminal = sys.stderr if is_stderr else sys.stdout
         self.log = open("bot.log", "a", encoding="utf-8")
+        self.is_stderr = is_stderr
+        self._writes = 0
+
+    def _rotate_if_needed(self):
+        """Keep bot.log bounded (Windows-safe: copy then truncate in place)."""
+        try:
+            if self.is_stderr or os.path.getsize("bot.log") <= self.MAX_LOG_BYTES:
+                return
+            shutil.copyfile("bot.log", "bot.log.1")
+            self.log.seek(0)
+            self.log.truncate(0)
+        except Exception:
+            pass
+
     def write(self, message):
+        self._writes += 1
+        if self._writes % 500 == 0:
+            self._rotate_if_needed()
         try:
             self.terminal.write(message)
         except Exception:
@@ -234,7 +253,7 @@ class Database:
             if self.db is None or self.col is None:
                 return
             await self.col.create_index("id", unique=True)
-            await self.db.watchers.create_index([("source_id", 1), ("source_thread", 1)])
+            await self.db.watchers.create_index([("user_id", 1), ("source_id", 1), ("source_thread", 1)])
             await self.db.sync_progress.create_index([("user_id", 1), ("source_id", 1), ("dest_id", 1)])
             await self.db.saved_channels.create_index([("user_id", 1), ("channel_type", 1), ("last_used", -1)])
             try:
@@ -903,6 +922,7 @@ class Database:
             text_format = []
 
         query = {
+            'user_id': int(user_id),
             'source_id': int(source_id),
             'source_thread': int(source_thread) if source_thread else None
         }
@@ -943,10 +963,12 @@ class Database:
             }
             await self.db.watchers.insert_one(watcher)
 
-    async def get_watcher(self, source_id, source_thread=None):
+    async def get_watcher(self, source_id, source_thread=None, user_id=None):
         query = {'source_id': int(source_id)}
         if source_thread:
             query['source_thread'] = int(source_thread)
+        if user_id is not None:
+            query['user_id'] = int(user_id)
         return await self.db.watchers.find_one(query)
 
     async def get_all_watchers(self):
@@ -1684,8 +1706,10 @@ def extract_telegram_file_names(message) -> list[str]:
                 elif getattr(attr, "file_name", None) and isinstance(attr.file_name, str):
                     names.append(attr.file_name.strip())
 
-    # 3. Caption / text lines inspection fallback (only when no media attribute filenames found)
-    if not names:
+    # 3. Caption / text lines inspection fallback (ONLY when the message carries a file).
+    #    A text post that merely mentions "English.srt" must never be treated as a subtitle file.
+    has_media = any(getattr(message, t, None) for t in ("document", "video", "audio", "animation"))
+    if not names and has_media:
         if getattr(message, "caption", None):
             cap_str = message.caption.html if hasattr(message.caption, "html") else str(message.caption)
             for line in cap_str.splitlines():
@@ -1992,6 +2016,10 @@ def format_file_size(size_bytes: int | float) -> str:
 def append_media_footer(caption: str, file_size_bytes: int = 0) -> str:
     if not caption:
         caption = ""
+    # Lucifer Cloud Engine templates already carry Size + the official footer.
+    # Never strip/re-append them: doing so deleted the Join line and duplicated Size.
+    if is_lucifer_cloud_engine_caption(caption):
+        return caption
     # Strip any pre-existing footer to prevent duplication across retries/fallbacks/targets
     caption = strip_existing_media_footers(caption)
 
@@ -3699,12 +3727,14 @@ async def start_string_session_login(bot: Client, user_id: int):
 
     validating_msg = await prompt_msg.reply("🔄 <b>Connecting & verifying session with Telegram...</b>", quote=True)
     temp_client = None
+    login_api_id = API_ID or 6
+    login_api_hash = API_HASH or "eb06d4abfb49dc3eeb1aeb98ae0f581e"
     try:
         temp_client = Client(
             f"auth_val_{user_id}_{int(time.time())}",
             session_string=raw_session,
-            api_id=API_ID or 6,
-            api_hash=API_HASH or "eb06d4abfb49dc3eeb1aeb98ae0f581e",
+            api_id=login_api_id,
+            api_hash=login_api_hash,
             device_model="Telegram Desktop",
             system_version="Windows 11 x64",
             app_version="5.6.1 x64",
@@ -3721,8 +3751,8 @@ async def start_string_session_login(bot: Client, user_id: int):
             'username': f"@{me.username}" if me.username else "",
             'user_id': me.id,
             'session': raw_session,
-            'api_id': API_ID,
-            'api_hash': API_HASH
+            'api_id': login_api_id,
+            'api_hash': login_api_hash
         }
         await db.add_user_account(user_id, acc_data, set_as_active=True)
         
@@ -6398,7 +6428,9 @@ async def send_log(text: str):
     except Exception as e:
         print(f"❌ Failed to send log to Telegram: {e} | LOG_CHANNEL: '{LOG_CHANNEL}'. Please ensure Bot is an ADMIN in LOG_CHANNEL and ID has -100 prefix.")
 
-async def check_disk_space(required_bytes=500 * 1024 * 1024):
+DEFAULT_DISK_HEADROOM = 1536 * 1024 * 1024
+
+async def check_disk_space(required_bytes=DEFAULT_DISK_HEADROOM):
     try:
         total, used, free = shutil.disk_usage(".")
         if free < required_bytes: 
@@ -6409,31 +6441,40 @@ async def check_disk_space(required_bytes=500 * 1024 * 1024):
 
 async def cleanup_watchdog():
     while True:
-        await asyncio.sleep(600) 
+        await asyncio.sleep(600)
         try:
             download_path = Path("./downloads")
             if not download_path.exists(): continue
-            
+
             current_time = time.time()
-            max_age = 2 * 60 * 60 
-            
+            max_age = 6 * 60 * 60
+
             for user_folder in download_path.iterdir():
-                if user_folder.is_dir():
-                    for task_folder in user_folder.iterdir():
-                        if task_folder.is_dir():
-                            folder_time = task_folder.stat().st_mtime
-                            if (current_time - folder_time) > max_age:
-                                await asyncio.to_thread(shutil.rmtree, task_folder, ignore_errors=True)
-                                await send_log(f"🧹 **Auto-Cleanup:** Deleted stuck folder `{task_folder.name}` (Older than 2h)")
+                if not user_folder.is_dir():
+                    continue
+                try:
+                    uid = int(user_folder.name)
+                except (ValueError, TypeError):
+                    continue  # album scratch folders are uuid-named
+                active_tasks = ACTIVE_PROCESSES.get(uid, {})
+                for task_folder in user_folder.iterdir():
+                    if not task_folder.is_dir():
+                        continue
+                    # NEVER delete a folder that belongs to a task still running
+                    if task_folder.name in active_tasks:
+                        continue
+                    if (current_time - task_folder.stat().st_mtime) > max_age:
+                        await asyncio.to_thread(shutil.rmtree, task_folder, ignore_errors=True)
+                        await send_log(f"🧹 **Auto-Cleanup:** Deleted stuck folder `{task_folder.name}` (Older than 6h)")
         except Exception as e:
             print(f"Watchdog Error: {e}")
-            
+
 async def start_task_final(client: Client, message_context: Message, task_data: dict, delay: int, user_id: int):
     if not await check_disk_space():
         msg = "⚠️ **Server Busy:** Disk is almost full. Please wait for other tasks to finish."
         if isinstance(message_context, Message):
              await message_context.reply(msg, quote=True)
-        await send_log("🚨 **Critical:** Disk Space Low (Under 500MB). Tasks rejected.")
+        await send_log("🚨 **Critical:** Disk space low (under 1.5 GB free). Tasks rejected.")
         return
 
     if user_id not in SUPER_ADMINS and batch_temp.ACTIVE_TASKS.get(user_id, 0) >= MAX_CONCURRENT_TASKS_PER_USER:
@@ -7100,6 +7141,12 @@ async def handle_private(client: Client, acc, message: Message, chatid, msgid: i
                 if msg_fresh.empty: return False, "deleted"
                 
                 file_size = getattr(msg_fresh.document, "file_size", 0) or getattr(msg_fresh.video, "file_size", 0) or getattr(msg_fresh.audio, "file_size", 0)
+
+                if not await check_disk_space(int(file_size * 1.15) + 200 * 1024 * 1024):
+                    print(f"🚫 [DISK] Insufficient free space for {file_size} bytes (msg {msgid}); aborting item.")
+                    if down_task and not down_task.done():
+                        down_task.cancel()
+                    return False, "failed"
 
                 if file_size > split_limit:
                     file_path = await acc.download_media(msg_fresh, file_name=str(file_path_to_save), progress=progress, progress_args=[task_uuid, "down"])
@@ -7812,8 +7859,13 @@ async def process_media_album(client, chat_id, media_group_id, watcher, targets)
         else:
             filtered_messages.append(m)
 
+    # Content-type filter must apply to albums too (the single-message path already does this)
+    allowed_types = watcher.get('allowed_types')
+    if allowed_types is not None:
+        filtered_messages = [m for m in filtered_messages if get_message_type(m) in allowed_types]
+
     if not filtered_messages:
-        print(f"🚫 [ALBUM DROP] All items in album {media_group_id} blocked. Dropping album.")
+        print(f"🚫 [ALBUM DROP] All items in album {media_group_id} filtered out. Dropping album.")
         return
 
     messages = filtered_messages
@@ -7999,10 +8051,16 @@ async def process_media_album(client, chat_id, media_group_id, watcher, targets)
 async def process_watcher_message(client, message):
     chat_id = message.chat.id
     topic_id = getattr(message, "message_thread_id", None)
+
+    # MULTI-TENANT ISOLATION: resolve the bot user that owns this userbot client,
+    # so two users watching the same source can never share routes.
+    owner_uid = next((uid for uid, c in USER_CLIENTS.items() if c is client), None)
+    if owner_uid is None:
+        return
     
-    watcher = await db.get_watcher(chat_id, topic_id)
+    watcher = await db.get_watcher(chat_id, topic_id, user_id=owner_uid)
     if not watcher:
-        watcher = await db.get_watcher(chat_id, None)
+        watcher = await db.get_watcher(chat_id, None, user_id=owner_uid)
         
     if not watcher: 
         return
@@ -8411,8 +8469,8 @@ async def main():
     print("🤖 Bot Started")
     try:
         await db.init_indexes()
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"⚠️ [STARTUP] Database index initialisation failed: {e}")
     
     await register_bot_commands(app)
     
@@ -8460,6 +8518,17 @@ async def main():
                             pass
             
         except Exception as e:
+            print(f"⚠️ [STARTUP] Watcher restore failed for user {user_id}: {e}")
+            try:
+                await send_log(f"⚠️ **Watcher restore failed** for `{user_id}`: `{e}`")
+            except Exception:
+                pass
+
+    if not AUTH_USERS:
+        print("⚠️ [SECURITY] No ADMINS/AUTH_USERS configured — bot is OPEN to every user.")
+        try:
+            await send_log("⚠️ **Security warning:** no ADMINS/AUTH_USERS configured; open access is enabled.")
+        except Exception:
             pass
 
     asyncio.create_task(start_koyeb_health_check())

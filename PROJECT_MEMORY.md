@@ -229,3 +229,15 @@ Comprehensive code audit conducted by Senior Software Engineer and Code Auditor.
   - Added notification in task start message if `auto_dl` is currently OFF.
 - **Verification:** All 81 forwarder engine tests passing (100% pass rate).
 
+## 17. Audit Fixes — Cloud Template Safety, Tenant Isolation and Resource Guards (2026-11-13)
+
+- **Cloud Engine template preserved end-to-end:** `append_media_footer()` now returns Lucifer Cloud Engine captions untouched. Previously the handler called `smart_caption()` and then `append_media_footer()`, which deleted the `📢 Join: @LuciferDatabase` line and appended a second `💾 Size:` line. The delivered caption now keeps the full cinematic template, exactly one Size line, one `⚜️ Powered By`, the filename hyperlink and the `@LuciferDatabase` / `@RequestLuciferDatabase` references.
+- **Watcher isolation:** watchers are keyed by `(user_id, source_id, source_thread)`; `add_watcher()` includes the owner and `get_watcher()` filters by it, with the owner resolved from `USER_CLIENTS`.
+- **Album filtering:** `process_media_album()` now honours `allowed_types` instead of mirroring every album.
+- **Cleanup watchdog:** never deletes folders belonging to a running task and uses a 6-hour age threshold.
+- **Disk guards:** default headroom 1.5 GB plus a per-item check for 115% of the file size.
+- **Startup visibility:** index/watcher failures are logged and reported to `LOG_CHANNEL`; explicit warning when no admins are configured.
+- **String-session login:** stores the API credentials actually used for validation.
+- **Caption fallback:** only inspects captions for file-bearing media, preventing false `*.srt` drops of text posts.
+- **Verification:** `pytest tests/test_forwarder_engine.py` — 84 passed (2026-11-13).
+

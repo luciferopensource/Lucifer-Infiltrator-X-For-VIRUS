@@ -394,6 +394,35 @@ class TestLuciferCloudEngineCaption:
         assert "💾 Size: 100.00 MB" in res
         assert "⚜️ Powered By : <a href=\"https://t.me/luciferdatabase\">[@luciferdatabase]</a>" in res
 
+    def test_cloud_caption_not_double_footered_in_handler_path(self):
+        """The handler calls smart_caption() then append_media_footer(): the cloud
+        template must survive with one Size line, its Join line and one footer."""
+        sample = (
+            "🎬 File Name: Neelpodmo (2025) Bengali iScreen WEB-DL 1080p.mkv\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "💾 DB ID: [@LuciferDatabase] | 🌐 Source: WEB-DL\n"
+            "⚖️ Size: 1.91 GB | 🎬 Format: MKV | ⚙️ Codec: WEB-DL\n"
+            "📺 Resolution: 1080p\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "📢 Join: @LuciferDatabase for fast downloads & Database access.\n"
+            "❓ Need a File? Request: [@RequestLuciferDatabase]\n"
+            "━━━━━━━━━━━━━━━━━━━"
+        )
+        final = append_media_footer(smart_caption(sample), int(1.91 * 1024 ** 3))
+        assert final.count("Size:") == 1
+        assert "💾 Size:" not in final
+        assert "📢 Join: @LuciferDatabase for fast downloads & Database access." in final
+        assert final.count("Powered By") == 1
+
+    def test_non_cloud_caption_still_gets_size_footer(self):
+        final = append_media_footer(smart_caption("Movie.2024.1080p.mkv"), 100 * 1024 * 1024)
+        assert "💾 Size: 100.00 MB" in final
+
+    def test_text_post_mentioning_srt_not_blocked(self):
+        msg = MockMessage(text="Subtitles: English.srt available on request")
+        blocked, reason, matched = is_message_blocked(msg)
+        assert blocked is False
+
 
 class TestAuditedEdgeCases:
     """
