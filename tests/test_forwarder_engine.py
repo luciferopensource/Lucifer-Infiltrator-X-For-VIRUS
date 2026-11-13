@@ -519,3 +519,15 @@ BOT_TOKEN=123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi
     assert "123456789:ABC" not in text
     assert "A" * 300 not in text
     assert "normal line" in text
+
+def test_safe_copy_message_treats_none_as_failure():
+    class FakeClient:
+        async def copy_message(self, **kwargs):
+            return None
+
+    class FakeOkClient:
+        async def copy_message(self, **kwargs):
+            return object()
+
+    assert asyncio.run(rb.safe_copy_message(FakeClient())) is None
+    assert asyncio.run(rb.safe_copy_message(FakeOkClient())) is not None

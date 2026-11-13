@@ -7073,6 +7073,108 @@ async def process_links_logic(client: Client, message: Message, text: str, targe
             try: await client.send_message(message.chat.id, final_text, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
             except Exception: pass
 
+async def safe_copy_message(client_obj, **kwargs):
+    """Copy a message and return the sent Message, or None on empty/failure.
+
+    Pyrogram's Message.copy() logs "Empty messages cannot be copied." and returns None
+    instead of raising, so callers must test the return value.
+    """
+    try:
+        result = await client_obj.copy_message(**kwargs)
+        return result
+    except FloodWait as e:
+        await asyncio.sleep(e.value + 5)
+        try:
+            return await client_obj.copy_message(**kwargs)
+        except Exception as e2:
+            print(f"Copy retry failed: {e2}")
+            return None
+    except Exception as e:
+        print(f"Copy failed: {e}")
+        return None
+
+
+async def bridge_fast_copy(client, acc, source_chat_id, message_id, dest_chat_id, dest_thread_id,
+                            caption, fallback_caption, reply_markup, is_bot_dm, user_id):
+    """Userbot -> bot PM -> destination, with no download and verified delivery.
+
+    Message.copy() logs "Empty messages cannot be copied." and returns None instead of raising;
+    callers must treat None as failure, otherwise the bridge gets deleted without a final copy.
+    """
+    bot_user = getattr(client, "me", None) or getattr(app, "me", None)
+    if not bot_user:
+        return False
+    bot_id = getattr(bot_user, "id", None)
+    bot_target = f"@{bot_user.username}" if getattr(bot_user, "username", None) else bot_id
+    bridge_msg = None
+    success = False
+    try:
+        # Blank caption: the bridge must never look like a new source link to the save handler.
+        bridge_msg = await acc.copy_message(chat_id=bot_target, from_chat_id=source_chat_id, message_id=message_id, caption=" ")
+        if not bridge_msg or getattr(bridge_msg, "empty", False):
+            print("[BRIDGE] bridge message is empty; aborting")
+            return False
+
+        sender_id = getattr(getattr(acc, "me", None), "id", None) or user_id
+        print(f"[BRIDGE] id={bridge_msg.id} chat={bridge_msg.chat.id} empty={bridge_msg.empty} "
+              f"media={bool(bridge_msg.media)} sender={sender_id} dest={dest_chat_id}")
+
+        # Warm the peer cache; a cold access hash can make getMessages return an empty message.
+        try:
+            await client.get_chat(sender_id)
+        except Exception as e:
+            print(f"[BRIDGE] get_chat({sender_id}) failed: {e}")
+
+        await asyncio.sleep(0.2)
+        for attempt in range(2):
+            result = await client.copy_message(
+                chat_id=dest_chat_id, from_chat_id=sender_id, message_id=bridge_msg.id,
+                reply_to_message_id=dest_thread_id, caption=caption,
+                parse_mode=enums.ParseMode.HTML, reply_markup=reply_markup
+            )
+            if result:
+                success = True
+                return True
+            print(f"[BRIDGE] copy attempt {attempt + 1} returned None")
+            await asyncio.sleep(0.4)
+
+        try:
+            result = await client.copy_message(
+                chat_id=dest_chat_id, from_chat_id=sender_id, message_id=bridge_msg.id,
+                reply_to_message_id=dest_thread_id, caption=fallback_caption,
+                reply_markup=reply_markup
+            )
+            if result:
+                success = True
+                return True
+            print("[BRIDGE] fallback copy returned None")
+        except Exception as e:
+            print(f"[BRIDGE] fallback copy failed: {e}")
+
+        try:
+            forwarded = await client.forward_messages(
+                chat_id=dest_chat_id, from_chat_id=sender_id, message_ids=bridge_msg.id
+            )
+            if forwarded:
+                success = True
+                return True
+            print("[BRIDGE] forward returned None")
+        except Exception as e:
+            print(f"[BRIDGE] forward failed: {e}")
+
+        return False
+    except Exception as e:
+        print(f"Bridge Copy Notice: {e}")
+        return False
+    finally:
+        # On a Bot-PM destination keep the bridge if final delivery failed, so the file does not vanish.
+        if bridge_msg and (success or not is_bot_dm):
+            try:
+                await bridge_msg.delete()
+            except Exception:
+                pass
+
+
 async def handle_private(client: Client, acc, message: Message, chatid, msgid: int, index: int, total_count: int, status_message: Message, targets: list, delay, user_id, task_uuid=None, is_restricted=False, header_text="", filter_thread_id=None, allowed_types=None, text_format=None):
     if not task_uuid:
         task_uuid = "default"
@@ -7225,7 +7327,6 @@ async def handle_private(client: Client, acc, message: Message, chatid, msgid: i
         forward_success = False
         bot_user = getattr(client, "me", None) or getattr(app, "me", None)
         bot_id = getattr(bot_user, "id", None) if bot_user else None
-
         for dest in targets:
             dest_chat_id = dest['dest_id']
             try:
@@ -7236,107 +7337,37 @@ async def handle_private(client: Client, acc, message: Message, chatid, msgid: i
             dest_thread_id = dest.get('dest_thread')
             is_me = (dest_chat_id == "me" or str(dest_chat_id).lower() == "me")
             is_bot_dm = (dest_chat_id == user_id or str(dest_chat_id) == str(user_id))
+            fallback_cap = prepare_caption_fallback(clean_caption, media_file_size)
 
-            copied = False
-
-            # 1. Saved Messages: always copy via userbot (acc)
             if is_me:
-                try:
-                    await acc.copy_message(chat_id="me", from_chat_id=chatid, message_id=msgid, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=None)
-                    copied = True
-                except FloodWait as e:
-                    await asyncio.sleep(e.value + 5)
-                    await acc.copy_message(chat_id="me", from_chat_id=chatid, message_id=msgid, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=None)
-                    copied = True
-                except Exception:
-                    try:
-                        fallback_cap = prepare_caption_fallback(clean_caption, media_file_size)
-                        await acc.copy_message(chat_id="me", from_chat_id=chatid, message_id=msgid, reply_to_message_id=dest_thread_id, caption=fallback_cap, reply_markup=None)
-                        copied = True
-                    except Exception:
-                        pass
-                if copied:
+                if await safe_copy_message(acc, chat_id="me", from_chat_id=chatid, message_id=msgid, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=None):
                     forward_success = True
                 continue
 
-            # 2. Try Bot direct copy_message (Clean server-side copy without forward headers)
-            try:
-                await client.copy_message(chat_id=dest_chat_id, from_chat_id=chatid, message_id=msgid, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=msg.reply_markup)
-                copied = True
-            except FloodWait as e_fw:
-                await asyncio.sleep(e_fw.value + 5)
-                try:
-                    await client.copy_message(chat_id=dest_chat_id, from_chat_id=chatid, message_id=msgid, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=msg.reply_markup)
-                    copied = True
-                except Exception:
-                    pass
-            except Exception:
-                try:
-                    fallback_cap = prepare_caption_fallback(clean_caption, media_file_size)
-                    await client.copy_message(chat_id=dest_chat_id, from_chat_id=chatid, message_id=msgid, reply_to_message_id=dest_thread_id, caption=fallback_cap, reply_markup=msg.reply_markup)
-                    copied = True
-                except Exception:
-                    pass
+            # 1. Bot direct server-side copy
+            if await safe_copy_message(client, chat_id=dest_chat_id, from_chat_id=chatid, message_id=msgid, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=msg.reply_markup):
+                forward_success = True
+                continue
 
-            # 3. Try Userbot (acc) direct copy_message
-            if not copied:
-                try:
-                    target_for_acc = bot_id if (is_bot_dm and bot_id) else dest_chat_id
-                    await acc.copy_message(chat_id=target_for_acc, from_chat_id=chatid, message_id=msgid, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=None)
-                    copied = True
-                except FloodWait as e:
-                    await asyncio.sleep(e.value + 5)
-                    try:
-                        await acc.copy_message(chat_id=target_for_acc, from_chat_id=chatid, message_id=msgid, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=None)
-                        copied = True
-                    except Exception:
-                        pass
-                except Exception:
-                    try:
-                        fallback_cap = prepare_caption_fallback(clean_caption, media_file_size)
-                        await acc.copy_message(chat_id=target_for_acc, from_chat_id=chatid, message_id=msgid, reply_to_message_id=dest_thread_id, caption=fallback_cap, reply_markup=None)
-                        copied = True
-                    except Exception:
-                        pass
+            # 2. Bot copy with a shortened/plain fallback caption
+            if await safe_copy_message(client, chat_id=dest_chat_id, from_chat_id=chatid, message_id=msgid, reply_to_message_id=dest_thread_id, caption=fallback_cap, reply_markup=msg.reply_markup):
+                forward_success = True
+                continue
 
-            # 4. Bridge Fast-Copy (acc -> Bot DM -> Destination Channel)
-            # If Bot is not in private source channel, but is an admin in destination channel:
-            # Userbot acc copies message to Bot DM (chat_id=bot_id), then Bot copies from user DM (from_chat_id=user_id) to destination!
-            # Finishes in 0.2s with zero download and zero bandwidth!
-            if not copied and bot_id:
-                bridge_msg = None
-                bot_target = f"@{bot_user.username}" if getattr(bot_user, "username", None) else bot_id
-                try:
-                    # Blank caption: the bridge must never look like a new source link to the bot's save handler
-                    bridge_msg = await acc.copy_message(chat_id=bot_target, from_chat_id=chatid, message_id=msgid, caption=" ")
-                    if bridge_msg:
-                        # The bridge lives in the bot's DM with the userbot account, so the
-                        # bot must read it from that account's id (not the bot-owner user id).
-                        bridge_sender_id = getattr(getattr(acc, "me", None), "id", None) or user_id
-                        try:
-                            await client.copy_message(chat_id=dest_chat_id, from_chat_id=bridge_sender_id, message_id=bridge_msg.id, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=msg.reply_markup)
-                            copied = True
-                        except FloodWait as fw_b:
-                            await asyncio.sleep(fw_b.value + 5)
-                            await client.copy_message(chat_id=dest_chat_id, from_chat_id=bridge_sender_id, message_id=bridge_msg.id, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=msg.reply_markup)
-                            copied = True
-                        except Exception:
-                            try:
-                                fallback_cap = prepare_caption_fallback(clean_caption, media_file_size)
-                                await client.copy_message(chat_id=dest_chat_id, from_chat_id=bridge_sender_id, message_id=bridge_msg.id, reply_to_message_id=dest_thread_id, caption=fallback_cap, reply_markup=msg.reply_markup)
-                                copied = True
-                            except Exception:
-                                pass
-                except Exception as e_bridge:
-                    print(f"Bridge Copy Notice: {e_bridge}")
-                finally:
-                    if bridge_msg:
-                        try:
-                            await bridge_msg.delete()
-                        except Exception:
-                            pass
+            # 3. Userbot direct copy (never for the bot's own PM: that would be Saved Messages)
+            if not is_bot_dm:
+                if await safe_copy_message(acc, chat_id=dest_chat_id, from_chat_id=chatid, message_id=msgid, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=None):
+                    forward_success = True
+                    continue
+                if await safe_copy_message(acc, chat_id=dest_chat_id, from_chat_id=chatid, message_id=msgid, reply_to_message_id=dest_thread_id, caption=fallback_cap, reply_markup=None):
+                    forward_success = True
+                    continue
 
-            if copied:
+            # 4. Bridge: userbot -> bot PM -> destination (zero download)
+            if bot_id and await bridge_fast_copy(
+                client, acc, chatid, msgid, dest_chat_id, dest_thread_id,
+                clean_caption, fallback_cap, msg.reply_markup, is_bot_dm, user_id
+            ):
                 forward_success = True
 
         if forward_success:
@@ -7459,16 +7490,12 @@ async def handle_private(client: Client, acc, message: Message, chatid, msgid: i
                 for dest in targets:
                     dest_chat_id = dest['dest_id']
                     dest_thread_id = dest.get('dest_thread')
-                    try:
-                        await client.copy_message(chat_id=dest_chat_id, from_chat_id=chatid, message_id=msgid, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=msg.reply_markup)
+                    if await safe_copy_message(client, chat_id=dest_chat_id, from_chat_id=chatid, message_id=msgid, reply_to_message_id=dest_thread_id, caption=clean_caption, parse_mode=enums.ParseMode.HTML, reply_markup=msg.reply_markup):
                         download_success = True
-                    except Exception:
-                        try:
-                            fallback_cap = prepare_caption_fallback(clean_caption, media_file_size)
-                            await client.copy_message(chat_id=dest_chat_id, from_chat_id=chatid, message_id=msgid, reply_to_message_id=dest_thread_id, caption=fallback_cap, reply_markup=msg.reply_markup)
+                    else:
+                        fallback_cap = prepare_caption_fallback(clean_caption, media_file_size)
+                        if await safe_copy_message(client, chat_id=dest_chat_id, from_chat_id=chatid, message_id=msgid, reply_to_message_id=dest_thread_id, caption=fallback_cap, reply_markup=msg.reply_markup):
                             download_success = True
-                        except Exception:
-                            pass
                 if download_success:
                     return True, "success"
             return False, "failed"
