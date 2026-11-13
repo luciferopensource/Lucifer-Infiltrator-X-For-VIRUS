@@ -120,6 +120,7 @@ TASK_QUEUE = defaultdict(list)
 io_executor = ThreadPoolExecutor(max_workers=4)
 
 LOGIN_SYSTEM = os.environ.get("LOGIN_SYSTEM", "True").lower() == "true"
+ALLOW_OPEN_ACCESS = os.environ.get("ALLOW_OPEN_ACCESS", "false").lower() == "true"
 ERROR_MESSAGE = os.environ.get("ERROR_MESSAGE", "True").lower() == "true"
 WAITING_TIME = int(os.environ.get("WAITING_TIME", 3))
 
@@ -159,15 +160,15 @@ def is_admin(user_id: int) -> bool:
     if not user_id:
         return False
     if not SUPER_ADMINS and not AUTH_USERS:
-        return True
+        return ALLOW_OPEN_ACCESS
     return user_id in SUPER_ADMINS
 
 def is_authorized(user_id: int) -> bool:
     if not user_id:
         return False
     if not AUTH_USERS:
-        # If no admins or authorized users configured in environment, allow open access
-        return True
+        # Open access is opt-in only; set OWNER_ID/ADMINS or ALLOW_OPEN_ACCESS=true
+        return ALLOW_OPEN_ACCESS
     return user_id in AUTH_USERS
 
 HELP_TXT = """<b>📚 𝕃𝕌ℂ𝕀𝔽𝔼ℝ 𝕄𝕆ℝℕ𝕀ℕ𝔾𝕊𝕋𝔸ℝ — MASTER OPERATOR MANUAL</b>
@@ -4505,7 +4506,7 @@ async def unwatch_callback(client, query):
 # --- CORE: receive links / start tasks / processing / cancel checks ---
 # ==============================================================================
 
-@app.on_message((filters.text | filters.caption | filters.forwarded) & filters.private & ~filters.regex(r"^/") & ~filters.command(["dl", "start", "help", "cancel", "botstats", "login", "logout", "broadcast", "status", "watch", "unwatch", "watchers", "removetarget", "removesource", "log", "tasks", "progress", "toggledl", "addchannel", "addsavedchannel", "savechannel", "add_channel", "save_channel", "viewsavedchannels", "viewsaved", "savedchannels", "channels", "saved", "saved_channels", "setcommands", "sync_commands", "addsourcechannel", "addsource", "savesourcechannel", "savesource", "adddestinationchannel", "adddestination", "adddestchannel", "adddest", "savedestchannel", "savedestination", "viewsourcechannels", "viewsources", "viewsource", "sourcechannels", "sources", "viewdestinationchannels", "viewdestchannels", "viewdest", "viewdestination", "destchannels", "destinations", "replace", "rebrand", "replacements", "clearreplace", "clearreplacements", "setthumb", "setthumbnail", "viewthumb", "mythumb", "thumbnail", "delthumb", "clearthumb", "deletethumb", "channelstats", "stats", "analytics", "mywatchers", "kickuser", "logoutuser", "kicksession"]))
+@app.on_message((filters.text | filters.caption | filters.forwarded) & filters.private & ~filters.regex(r"^/"))
 async def save(client: Client, message: Message):
     user_id = message.from_user.id
     if not is_authorized(user_id):
@@ -6395,7 +6396,6 @@ async def finalize_watcher_setup(client, message, data, delay, user_id=None):
         f"🎯 Destination: `{data.get('dest_title')}`\n"
         f"📂 Dest Topic: `{data.get('dest_thread_id', 'None')}`\n"
         f"⏱ Delay: `{delay}s`\n"
-        f"🔒 Restricted Mode: `{'Yes' if data['is_restricted'] else 'No'}`\n"
         f"📝 Format: `{fmt_str}`\n"
         f"🎛 Filter: `{', '.join(data.get('allowed_types', []))}`"
     )
@@ -8612,9 +8612,9 @@ async def main():
                 pass
 
     if not AUTH_USERS:
-        print("⚠️ [SECURITY] No ADMINS/AUTH_USERS configured — bot is OPEN to every user.")
+        print("⚠️ [SECURITY] No ADMINS/AUTH_USERS configured — set OWNER_ID/ADMINS or ALLOW_OPEN_ACCESS=true.")
         try:
-            await send_log("⚠️ **Security warning:** no ADMINS/AUTH_USERS configured; open access is enabled.")
+            await send_log("⚠️ **Security warning:** no ADMINS/AUTH_USERS configured; access is restricted unless ALLOW_OPEN_ACCESS=true.")
         except Exception:
             pass
 
