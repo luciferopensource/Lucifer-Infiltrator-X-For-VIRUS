@@ -261,3 +261,12 @@ Comprehensive code audit conducted by Senior Software Engineer and Code Auditor.
 - **Verification:** All 91 test cases passing in `tests/test_forwarder_engine.py` (100% pass rate).
 
 
+
+## Quality inference added (2026-11-14)
+
+- **Branch / commit:** `main` @ `ae80aa6`
+- **Files touched:** `restrict_bot.py`, `tests/test_forwarder_engine.py`
+- **Work done:** this deployment never carried the quality-inference step (checked the full history — no `has_quality` match). Added it for parity with the sibling deployments: `sanitize_filename()` and `_process_media_line()` append `" 720p"` when a name has no quality tag; existing 720p/1080p/2160p/4K/8K tags are untouched. The Cloud Engine caption template and branding are not modified. Added `test_missing_quality_gets_720p_default` and updated four expectations.
+- **Tests actually run:** `pytest tests -q` → **93 passed** (2026-11-14).
+- **Not verified:** no live forward was executed against Telegram.
+- **Next action:** confirm the 720p default is acceptable for this variant, since it previously never advertised an inferred quality.
