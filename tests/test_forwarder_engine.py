@@ -179,24 +179,32 @@ class TestCaptionAndFilenameSanitisation:
     @pytest.mark.parametrize("inp, expected", [
         ("movie 1080p hdhub4u.mkv", "movie 1080p.mkv"),
         ("movie 1080p HDHub.mkv.001", "movie 1080p.mkv.001"),
-        ("[HDHub] Avatar 2009.mkv.002", "Avatar 2009.mkv.002"),
+        ("[HDHub] Avatar 2009.mkv.002", "Avatar 2009 720p.mkv.002"),
         ("Avatar 2009 @hub4u 001", "Avatar 2009 001"),
         ("Avatar 2009 @HDHUB 001", "Avatar 2009 001"),
         ("movie 1080p [hdhub4u].mkv", "movie 1080p.mkv"),
         ("movie 1080p - hdhub - .mkv.001", "movie 1080p.mkv.001"),
-        ("(hdhu) Avatar 2009.mkv.002", "Avatar 2009.mkv.002"),
+        ("(hdhu) Avatar 2009.mkv.002", "Avatar 2009 720p.mkv.002"),
         ("Movie.1080p.HDHub4u.top.mkv", "Movie.1080p.mkv"),
-        ("Series S01E01 [Hub4u].mkv", "Series S01E01.mkv"),
+        ("Series S01E01 [Hub4u].mkv", "Series S01E01 720p.mkv"),
         ("Show 720p - HDHu - .mp4", "Show 720p.mp4")
     ])
     def test_filename_sanitisation(self, inp, expected):
         out = sanitize_filename(inp)
         assert out == expected
 
+    def test_missing_quality_gets_720p_default(self):
+        """Files with no quality tag must advertise one; existing tags are untouched."""
+        assert sanitize_filename("Avatar 2009.mkv") == "Avatar 2009 720p.mkv"
+        assert sanitize_filename("Some Documentary.mp4") == "Some Documentary 720p.mp4"
+        # Already-tagged names must never get a second tag appended
+        assert sanitize_filename("Avatar 2009 1080p.mkv") == "Avatar 2009 1080p.mkv"
+        assert sanitize_filename("Avatar 2009 4K.mkv") == "Avatar 2009 4K.mkv"
+
     @pytest.mark.parametrize("inp, expected_contains", [
         ("movie 1080p hdhub4u.mkv", "movie 1080p.mkv"),
         ("movie 1080p HDHub.mkv.001", "movie 1080p.mkv.001"),
-        ("[HDHub] Avatar 2009.mkv.002", "Avatar 2009.mkv.002"),
+        ("[HDHub] Avatar 2009.mkv.002", "Avatar 2009 720p.mkv.002"),
         ("Avatar 2009 @hub4u 001", "Avatar 2009 001")
     ])
     def test_smart_caption_sanitisation(self, inp, expected_contains):

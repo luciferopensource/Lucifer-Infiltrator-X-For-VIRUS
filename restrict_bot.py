@@ -2185,6 +2185,11 @@ def sanitize_filename(filename: str) -> str:
     stem = re.sub(r'(@[a-zA-Z0-9_]+)\s*$', '', stem)
     stem = stem.rstrip(' .-')
 
+    # Quality inference: when the name carries no quality tag, append a default
+    # so renamed files always advertise one.
+    if ext and not QUALITY_REGEX.search(stem):
+        stem = f"{stem} 720p"
+
     if ext:
         final_name = f"{stem}{ext}{split_suffix}"
     else:
@@ -2216,6 +2221,11 @@ def _process_media_line(line_html: str) -> tuple[str, bool]:
 
     line_stem = re.sub(r'(@[a-zA-Z0-9_]+)(\s*(?:</[^>]+>)*\s*)$', r'\2', line_stem)
     line_stem = line_stem.rstrip(' .-')
+
+    # Quality inference for caption title lines (same rule as sanitize_filename)
+    if ext and not QUALITY_REGEX.search(line_stem):
+        line_stem = f"{line_stem} 720p"
+
     final_line = f"{line_stem}{ext}{split_suffix}{closing_tags}"
     final_line = re.sub(r' {2,}', ' ', final_line).strip()
     return final_line, True
