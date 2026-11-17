@@ -179,68 +179,167 @@ def is_authorized(user_id: int) -> bool:
         return ALLOW_OPEN_ACCESS
     return user_id in AUTH_USERS
 
-HELP_TXT = """<b>📚 𝕃𝕌ℂ𝕀𝔽𝔼ℝ 𝕄𝕆ℝℕ𝕀ℕ𝔾𝕊𝕋𝔸ℝ — MASTER OPERATOR MANUAL</b>
-
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+HELP_HOME = """<b>🔥 𝕃𝕌ℂ𝕀𝔽𝔼ℝ ℂ𝕃𝕆𝕌𝔻 𝔼ℕ𝔾𝕀ℕ𝔼</b>
+━━━━━━━━━━━━━━━━━━
 <blockquote expandable>
-<b>⚡ 1. SINGLE & BATCH DOWNLOADS (/dl)</b>
-• <b>Single Post:</b> Send any public or restricted message link.
-• <b>Batch Range:</b> Send <code>From - To</code> links to transfer multiple posts.
-• <b>Channel Scraping:</b> Send <code>From - all</code> to scrape all posts to the end.
-• <b>Examples:</b>
-  ├ <code>https://t.me/c/1234567890/101</code>
-  ├ <code>https://t.me/c/1234567890/101 - 250</code>
-  └ <code>https://t.me/c/1234567890/1 - all</code>
-• <b>Restricted Bot Links:</b> <code>https://t.me/b/botusername/1234</code>
-• <b>Reply Mode:</b> Reply to any forwarded message or link with <code>/dl</code>.
+✨ <b>Branded Cloud Engine forwarding</b>
 
-<b>💾 2. SAVED CHANNEL MEMORY (SOURCES & DESTINATIONS)</b>
-• Store your channels permanently — no more manual channel ID lookups:
-  ├ <code>/addsourcechannel [Link/ID]</code> (or <code>/addsource</code>) - Auto-resolves title & saves source.
-  ├ <code>/adddestinationchannel [Link/ID]</code> (or <code>/adddest</code>) - Tests write access & saves destination.
-  ├ <code>/viewsourcechannels</code> (or <code>/viewsources</code>) - 10-per-page browser with 1-click Watch & delete.
-  ├ <code>/viewdestinationchannels</code> (or <code>/viewdest</code>) - 10-per-page browser with channel management.
-  └ <b>WATCHERS Migration:</b> Use <code>/watchers</code> to auto-import all active watcher channels into saved memory!
+💎 <b>Premium Operator Codex</b>
+🧵 Topic routing · 👀 Watchers · 📥 Downloads · 🚀 Fast Forward
+🔐 Accounts · 🏷️ Re-branding · 📊 Dashboard
 
-<b>👀 3. 24/7 LIVE WATCHERS & SURVEILLANCE (/watch)</b>
-• Real-time channel watcher that auto-routes new messages instantaneously.
-• <b>1-Click Quick Setup:</b> Send <code>/watch</code> alone to pick from saved source channels!
-• <b>Direct Setup:</b> <code>/watch https://t.me/channel/123</code>
-• <b>Forum Topics:</b> Full support for source and destination topic IDs.
-• <b>Multi-Routing:</b> Route 1 source to multiple destinations simultaneously.
-• <b>Content Filtering:</b> Select Video, Document, Photo, Audio, Voice, Text, Animation, or Sticker.
-• <b>Typography Engine:</b> Format captions with <b>Mono</b>, <b>Bold</b>, <b>Italic</b>, or combinations (e.g. Bold+Italic, Mono+Bold), plus Original or Cleaned captions!
-• <b>Active Codex:</b> <code>/watchers</code> (or <code>/list</code>) - View, manage, or import active surveillance routes.
-• <b>Watcher Removal:</b> <code>/removetarget &lt;src&gt; &lt;dst&gt;</code> or <code>/removesource &lt;src&gt;</code> (or <code>/unwatch</code>).
-
-<b>🏷️ 4. CUSTOM RE-BRANDING & THUMBNAILS</b>
-• <code>/replace [old] -> [new]</code> - Auto-replace watermarks, links & names in captions.
-• <code>/replace</code> - View and manage your active text replacement rules.
-• <code>/clearreplace</code> - Delete all caption replacement rules.
-• <code>/setthumb</code> - Reply to any photo to set a custom channel thumbnail.
-• <code>/viewthumb</code> - Preview your currently active custom thumbnail.
-• <code>/delthumb</code> - Remove custom thumbnail and revert to default.
-
-<b>📊 5. ANALYTICS & HEALTH DASHBOARD</b>
-• <code>/channelstats</code> (or <code>/stats</code>) - View live deliveries, bandwidth saved, CPU & RAM load.
-• <code>/mywatchers</code> - Quick shortcut to active surveillance routes.
-
-<b>🎛 4. TASK & ENGINE DASHBOARD</b>
-• <code>/tasks</code> (or <code>/progress</code>) - Refresh real-time interactive progress message cards.
-• <code>/cancel</code> - Interactive termination menu for specific or all tasks.
-• <code>/toggledl</code> - Toggle Direct-Only vs Fallback Download/Upload mode.
-• <code>/pixel &lt;URL&gt;</code> - Generate direct high-speed CDN URLs for Pixeldrain links.
-• <code>/login</code> - Generate userbot session for private restricted channels.
-• <code>/logout</code> - Terminate userbot session and purge stored credentials.
-• <code>/setcommands</code> - Synchronize and update Telegram menu command suggestions.
-
-<b>👑 5. ADMINISTRATIVE CODEX (Admins & Sudos)</b>
-• <code>/status</code> - System hardware telemetry (CPU, RAM, Disk, Uptime, Queue).
-• <code>/botstats</code> - Detailed analytics of registered users, sessions, and database.
-• <code>/log</code> - Transmit the active application log file (<code>bot.log</code>).
-• <code>/broadcast</code> - Broadcast message to all registered bot users.
+<i>Every guide opens in the same scrollable premium format.</i>
 </blockquote>
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬"""
+━━━━━━━━━━━━━━━━━━
+<i>Tap a module below to open its guide.</i>"""
+
+HELP_PAGES = {
+    "topics": """<b>🧵 TOPIC ROUTING — PRIVATE &amp; PUBLIC</b>
+━━━━━━━━━━━━━━━━━━
+<blockquote expandable>
+📌 <b>Private forum</b>
+<code>https://t.me/c/1234567890/45</code>
+• <code>1234567890</code> → chat id
+• <code>45</code> → topic id
+• <b>All topics:</b> <code>https://t.me/c/1234567890</code>
+
+📌 <b>Public forum</b>
+• <b>All topics:</b> <code>https://t.me/MyGroup</code>
+• <b>One topic:</b> forward a message from that topic to the bot
+• Public <code>t.me/MyGroup/45</code> topic parsing is limited
+
+🧭 <b>Routing rules</b>
+• Bot must be admin in the destination group/forum.
+• Closed topics cannot receive messages.
+• One link without a topic watches the whole forum.
+• All source topics go to the selected destination topic; automatic 1:1 topic mapping is not enabled.
+</blockquote>
+━━━━━━━━━━━━━━━━━━
+<i>Tip: forward a topic message to the bot for the most reliable setup.</i>""",
+
+    "watch": """<b>👀 LIVE WATCHER — /watch</b>
+━━━━━━━━━━━━━━━━━━
+<blockquote expandable>
+1️⃣ Send <code>/watch</code> alone → choose a saved source.
+2️⃣ Or send <code>/watch &lt;source link&gt;</code>.
+3️⃣ Choose the destination: channel, group, DM or forum topic.
+4️⃣ Select content types and speed delay.
+5️⃣ Start the route.
+
+🔁 <b>Multi-route</b>
+• One source → multiple destinations.
+• Whole forum: omit the topic id from the source link.
+• Topic-only: include the topic id.
+
+🛠 <b>Manage routes</b>
+• <code>/watchers</code> — list active routes
+• <code>/removetarget src dst</code> — remove one destination
+• <code>/removesource src</code> — remove the source
+• <code>/addsourcechannel</code> / <code>/adddestinationchannel</code> — save peers
+</blockquote>
+━━━━━━━━━━━━━━━━━━
+<i>The userbot account must be a member of private sources.</i>""",
+
+    "dl": """<b>📥 DOWNLOAD &amp; FORWARD — /dl</b>
+━━━━━━━━━━━━━━━━━━
+<blockquote expandable>
+• <b>Single:</b> <code>https://t.me/c/1234567890/101</code>
+• <b>Batch:</b> <code>link1 - link2</code>
+• <b>Scrape all:</b> <code>link - all</code>
+• <b>Reply mode:</b> reply to a message with <code>/dl</code>
+• <b>Bot links:</b> <code>https://t.me/b/username/1234</code>
+• Choose the destination in the inline menu.
+• Topic link → only that topic; base link → all topics.
+• <code>/toggledl</code> OFF → fast-copy only (0 bandwidth); ON → download/upload fallback.
+</blockquote>
+━━━━━━━━━━━━━━━━━━
+<i>Use /toggledl OFF to protect Render bandwidth.</i>""",
+
+    "forward": """<b>🚀 FAST FORWARD ENGINE</b>
+━━━━━━━━━━━━━━━━━━
+<blockquote expandable>
+• Channel → channel, group, DM or forum topic.
+• Server-side copy first — 0 Render bandwidth.
+• Private source without bot membership → userbot bridge: source → bot PM → destination.
+• Caption style: preserved Lucifer Cloud Engine template.
+• Protected content may require download; keep <code>/toggledl</code> OFF to avoid bandwidth.
+• Bot needs post rights in the destination; userbot fallback needs member/admin rights.
+</blockquote>
+━━━━━━━━━━━━━━━━━━
+<i>Fast-copy is attempted before any download fallback.</i>""",
+
+    "rebrand": """<b>🏷️ RE-BRANDING &amp; THUMBNAILS</b>
+━━━━━━━━━━━━━━━━━━
+<blockquote expandable>
+• <code>/replace old -&gt; new</code> — add a replacement rule
+• <code>/replace</code> — manage active rules
+• <code>/clearreplace</code> — delete all rules
+• <code>/setthumb</code> — reply to a photo to set the thumbnail
+• <code>/viewthumb</code> — preview the active thumbnail
+• <code>/delthumb</code> — remove the custom thumbnail
+</blockquote>
+━━━━━━━━━━━━━━━━━━
+<i>Replacement rules apply to captions and filenames.</i>""",
+
+    "login": """<b>🔐 LOGIN &amp; ACCOUNTS</b>
+━━━━━━━━━━━━━━━━━━
+<blockquote expandable>
+• <code>/login</code> — phone/OTP or Pyrogram string session
+• <code>/accounts</code> — manage saved Telegram accounts
+• <code>/switchaccount</code> — switch the active account
+• <code>/logout</code> — remove the session
+• The userbot account must be a member of every private source.
+</blockquote>
+━━━━━━━━━━━━━━━━━━
+<i>Never share your session string or OTP with anyone.</i>""",
+
+    "dashboard": """<b>📊 DASHBOARD &amp; ADMIN</b>
+━━━━━━━━━━━━━━━━━━
+<blockquote expandable>
+• <code>/status</code> — CPU, RAM, disk, uptime, queue
+• <code>/stats</code> / <code>/channelstats</code> — delivery analytics
+• <code>/tasks</code> / <code>/progress</code> — live task cards
+• <code>/cancel</code> — cancel one task or all
+• <code>/toggledl</code> — auto-download mode
+• <code>/log</code> — redacted application log (admin)
+• <code>/broadcast</code> — send a message to all users (admin)
+</blockquote>
+━━━━━━━━━━━━━━━━━━
+<i>System metrics refresh on demand.</i>""",
+
+    "manual": """<b>📚 FULL COMMAND INDEX</b>
+━━━━━━━━━━━━━━━━━━
+<blockquote expandable>
+📥 <b>Download:</b> <code>/dl</code>
+👀 <b>Watchers:</b> <code>/watch</code>, <code>/watchers</code>, <code>/removetarget</code>, <code>/removesource</code>
+💾 <b>Peers:</b> <code>/addsourcechannel</code>, <code>/adddestinationchannel</code>, <code>/viewsources</code>, <code>/viewdest</code>
+🏷️ <b>Branding:</b> <code>/replace</code>, <code>/clearreplace</code>, <code>/setthumb</code>, <code>/viewthumb</code>, <code>/delthumb</code>
+🔐 <b>Account:</b> <code>/login</code>, <code>/logout</code>, <code>/accounts</code>, <code>/switchaccount</code>
+📊 <b>Stats:</b> <code>/status</code>, <code>/stats</code>, <code>/channelstats</code>, <code>/tasks</code>, <code>/progress</code>, <code>/cancel</code>
+⚙️ <b>Engine:</b> <code>/toggledl</code>, <code>/setcommands</code>, <code>/pixel</code>
+👑 <b>Admin:</b> <code>/botstats</code>, <code>/log</code>, <code>/broadcast</code>
+</blockquote>
+━━━━━━━━━━━━━━━━━━
+<i>Use the module buttons for detailed steps.</i>""",
+}
+
+
+def help_home_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🧵 Topics", callback_data="help_page:topics"), InlineKeyboardButton("👀 Watch", callback_data="help_page:watch")],
+        [InlineKeyboardButton("📥 /dl", callback_data="help_page:dl"), InlineKeyboardButton("🚀 Forward", callback_data="help_page:forward")],
+        [InlineKeyboardButton("🏷️ Re-branding", callback_data="help_page:rebrand"), InlineKeyboardButton("🔐 Login", callback_data="help_page:login")],
+        [InlineKeyboardButton("📊 Dashboard", callback_data="help_page:dashboard"), InlineKeyboardButton("📚 Full Index", callback_data="help_page:manual")],
+        [InlineKeyboardButton("❌ Close", callback_data="close_menu")],
+    ])
+
+
+def help_page_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Back to Help", callback_data="back_to_help"), InlineKeyboardButton("❌ Close", callback_data="close_menu")]
+    ])
+
+
 
 # ==============================================================================
 # --- DATABASE ---
@@ -2879,27 +2978,14 @@ async def send_help(client: Client, message: Message):
     if not is_authorized(user_id):
         return await message.reply('⛔ <b>Access Denied:</b> You are not authorized to use this bot.', quote=True)
 
-    help_kb = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("📥 Saved Sources", callback_data="ch_page:1:source_view:source"),
-            InlineKeyboardButton("📤 Saved Destinations", callback_data="ch_page:1:dest_view:dest")
-        ],
-        [
-            InlineKeyboardButton("🛰️ Active Watchers", callback_data="view_watchers_menu"),
-            InlineKeyboardButton("⚙️ Live Tasks", callback_data="tasks_refresh_menu")
-        ],
-        [
-            InlineKeyboardButton("❌ Close Guide", callback_data="close_menu")
-        ]
-    ])
-
     await client.send_message(
         message.chat.id,
-        text=HELP_TXT,
-        reply_markup=help_kb,
+        text=HELP_HOME,
+        reply_markup=help_home_kb(),
         parse_mode=enums.ParseMode.HTML,
         disable_web_page_preview=True
     )
+
 
 @app.on_callback_query(filters.regex(r"^tasks_refresh_menu$"))
 async def tasks_refresh_callback(client: Client, query: CallbackQuery):
@@ -3151,21 +3237,45 @@ async def back_to_help_callback(client: Client, query: CallbackQuery):
     user_id = query.from_user.id
     if not is_authorized(user_id):
         return await query.answer("⛔ Access Denied", show_alert=True)
+    try:
+        await query.message.edit_text(
+            HELP_HOME,
+            reply_markup=help_home_kb(),
+            parse_mode=enums.ParseMode.HTML,
+            disable_web_page_preview=True
+        )
+    except Exception:
+        pass
+    await query.answer()
 
-    help_kb = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("📥 Saved Sources", callback_data="ch_page:1:source_view:source"),
-            InlineKeyboardButton("📤 Saved Destinations", callback_data="ch_page:1:dest_view:dest")
-        ],
-        [
-            InlineKeyboardButton("🛰️ Active Watchers", callback_data="view_watchers_menu"),
-            InlineKeyboardButton("⚙️ Live Tasks", callback_data="tasks_refresh_menu")
-        ],
-        [
-            InlineKeyboardButton("❌ Close Guide", callback_data="close_menu")
-        ]
-    ])
-    await query.message.edit_text(HELP_TXT, reply_markup=help_kb, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
+
+@app.on_callback_query(filters.regex(r"^help_page:(topics|watch|dl|forward|rebrand|login|dashboard|manual)$"))
+async def help_page_callback(client: Client, query: CallbackQuery):
+    user_id = query.from_user.id
+    if not is_authorized(user_id):
+        return await query.answer("⛔ Access Denied", show_alert=True)
+    page_key = query.data.split(":", 1)[1]
+    page = HELP_PAGES.get(page_key)
+    if not page:
+        return await query.answer("This guide is not available.", show_alert=True)
+    await query.answer()
+    try:
+        await query.message.edit_text(
+            page,
+            reply_markup=help_page_kb(),
+            parse_mode=enums.ParseMode.HTML,
+            disable_web_page_preview=True
+        )
+    except Exception:
+        try:
+            await query.message.reply(
+                page,
+                reply_markup=help_page_kb(),
+                parse_mode=enums.ParseMode.HTML,
+                disable_web_page_preview=True
+            )
+        except Exception:
+            pass
 
 
 @app.on_message(filters.command(["toggledl", "toggledownl"]) & filters.private & ~filters.bot)
