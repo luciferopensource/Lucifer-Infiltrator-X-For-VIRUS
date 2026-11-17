@@ -1037,9 +1037,12 @@ class Database:
             await self.db.watchers.insert_one(watcher)
 
     async def get_watcher(self, source_id, source_thread=None, user_id=None):
-        query = {'source_id': int(source_id)}
-        if source_thread:
-            query['source_thread'] = int(source_thread)
+        # Exact thread match: a message from topic 99 must never fall back to a route
+        # for topic 45. A whole-forum watcher is stored with source_thread=None.
+        query = {
+            'source_id': int(source_id),
+            'source_thread': int(source_thread) if source_thread else None
+        }
         if user_id is not None:
             query['user_id'] = int(user_id)
         return await self.db.watchers.find_one(query)
